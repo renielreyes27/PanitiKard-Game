@@ -434,5 +434,515 @@ const PANITIKARD_DECKS = {
         didYouKnow: null
       }
     ]
+  },
+
+  alamat: {
+    id: "alamat",
+    title: "Alamat",
+    badge: "Alamat",
+    themeClass: "deck-alamat",
+    icon: "📜",
+    accentColor: "#F4F56B",
+    centerColor: "#F5EBCB",
+    borderColor: "#294629",
+    cornerNum: "01✦",
+    cornerDecor: "✦10",
+    cardCount: 15,
+    questionCount: 15,
+    competency: "Nauunawaan ang kahulugan, elemento, uri, at pampanitikang aral ng mga alamat.",
+    description: "Pagsusuri sa pinagmulan, elemento (tauhan, tagpuan, banghay), uri, at pampanitikang aral ng mga alamat.",
+    subtopics: ["Kahulugan", "Elemento", "Uri", "Aral", "Pagsusuri"],
+    questions: [
+      {
+        id: "alamat-q1",
+        number: 1,
+        category: "Kahulugan",
+        questionType: "multiple_choice",
+        difficulty: "easy",
+        points: 1,
+        question: "Ano ang pangunahing layunin ng alamat?",
+        choices: [
+          { key: "A", text: "Magbigay ng balita" },
+          { key: "B", text: "Ipaliwanag ang pinagmulan ng isang bagay, lugar, o pangyayari" },
+          { key: "C", text: "Maglahad ng talambuhay" },
+          { key: "D", text: "Magturo ng agham" }
+        ],
+        answer: "B",
+        acceptedAnswers: ["B", "b", "Ipaliwanag ang pinagmulan ng isang bagay, lugar, o pangyayari"],
+        explanation: "Ang alamat ay pangunahing naglalayong ipaliwanag ang pinagmulan ng mga bagay, lugar, o pangyayari sa pamamagitan ng kapana-panabik na salaysay."
+      },
+      {
+        id: "alamat-q2",
+        number: 2,
+        category: "Elemento",
+        questionType: "identification",
+        difficulty: "easy",
+        points: 1,
+        question: "Ano ang tawag sa mga gumaganap sa isang alamat?",
+        choices: null,
+        answer: "Tauhan",
+        acceptedAnswers: ["Tauhan", "tauhan", "mga tauhan"],
+        explanation: "Ang tauhan ang mga persona o karakter na gumaganap at nagbibigay-buhay sa mga pangyayari sa kuwento."
+      },
+      {
+        id: "alamat-q3",
+        number: 3,
+        category: "Uri",
+        questionType: "true_false",
+        difficulty: "easy",
+        points: 1,
+        question: "Ang alamat ng pinagmulan ng isang bundok ay kabilang sa mga alamat na nagpapaliwanag ng pinagmulan ng isang lugar.",
+        choices: [
+          { key: "True", text: "Tama (True)" },
+          { key: "False", text: "Mali (False)" }
+        ],
+        answer: "True",
+        acceptedAnswers: ["True", "true", "tama", "Tama"],
+        explanation: "Ang mga bundok, ilog, at bayan ay mga heograpikal na pook na kabilang sa alamat ng lugar (halimbawa: Alamat ng Bulkang Mayon)."
+      },
+      {
+        id: "alamat-q4",
+        number: 4,
+        category: "Kahulugan",
+        questionType: "fill_in_blank",
+        difficulty: "easy",
+        points: 1,
+        question: "Ang __________ ay isang uri ng panitikang pasalaysay na nagpapaliwanag sa pinagmulan ng mga bagay, lugar, halaman, hayop, o pangyayari.",
+        choices: null,
+        answer: "Alamat",
+        acceptedAnswers: ["Alamat", "alamat"],
+        explanation: "Ang alamat ay tradisyonal na panitikang tuluyan na nagpapaliwanag sa pinagmulan ng iba't ibang bagay sa ating paligid."
+      },
+      {
+        id: "alamat-q5",
+        number: 5,
+        category: "Elemento",
+        questionType: "multiple_choice",
+        difficulty: "average",
+        points: 2,
+        question: "Alin sa mga sumusunod ang tumutukoy sa pagkakasunod-sunod ng mga pangyayari sa alamat?",
+        choices: [
+          { key: "A", text: "Tagpuan" },
+          { key: "B", text: "Tauhan" },
+          { key: "C", text: "Banghay" },
+          { key: "D", text: "Aral" }
+        ],
+        answer: "C",
+        acceptedAnswers: ["C", "c", "Banghay"],
+        explanation: "Ang banghay ang maayos at lohikal na pagkakasunod-sunod ng mga pangyayari mula simula hanggang wakas."
+      },
+      {
+        id: "alamat-q6",
+        number: 6,
+        category: "Aral",
+        questionType: "situational",
+        difficulty: "average",
+        points: 2,
+        question: "Isang bata ang naging sakim at ayaw magbahagi ng kaniyang pagkain. Sa huli, nawalan siya ng mga kaibigan. Anong aral ang ipinapakita nito?",
+        choices: null,
+        answer: "Pagbabahagi",
+        acceptedAnswers: ["Pagbabahagi", "pagbabahagi", "pagiging mapagbahagi", "pagbahagi"],
+        explanation: "Ipinapakita sa sitwasyon ang kahalagahan ng pagbabahagi at pagiging bukas-palad sa kapwa."
+      },
+      {
+        id: "alamat-q7",
+        number: 7,
+        category: "Uri",
+        questionType: "multiple_choice",
+        difficulty: "easy",
+        points: 1,
+        question: "Anong uri ng alamat ang nagpapaliwanag kung paano nagsimula ang isang halaman?",
+        choices: [
+          { key: "A", text: "Alamat ng lugar" },
+          { key: "B", text: "Alamat ng halaman" },
+          { key: "C", text: "Alamat ng hayop" },
+          { key: "D", text: "Alamat ng bagay" }
+        ],
+        answer: "B",
+        acceptedAnswers: ["B", "b", "Alamat ng halaman"],
+        explanation: "Ang alamat ng halaman ay nakatuon sa pinagmulan ng mga puno, bulaklak, o prutas tulad ng pinya o mangga."
+      },
+      {
+        id: "alamat-q8",
+        number: 8,
+        category: "Pagsusuri",
+        questionType: "identification",
+        difficulty: "average",
+        points: 2,
+        question: "Ano ang tawag sa pangunahing mensahe o kaisipang nais ipabatid ng isang akda?",
+        choices: null,
+        answer: "Tema",
+        acceptedAnswers: ["Tema", "tema", "paksa", "Paksa"],
+        explanation: "Ang tema ang sentral na kaisipan o diwa na nais ituro o ibahagi ng may-akda sa mambabasa."
+      },
+      {
+        id: "alamat-q9",
+        number: 9,
+        category: "Elemento",
+        questionType: "true_false",
+        difficulty: "easy",
+        points: 1,
+        question: "Ang tagpuan ay tumutukoy sa lugar at panahon kung kailan naganap ang mga pangyayari sa alamat.",
+        choices: [
+          { key: "True", text: "Tama (True)" },
+          { key: "False", text: "Mali (False)" }
+        ],
+        answer: "True",
+        acceptedAnswers: ["True", "true", "tama", "Tama"],
+        explanation: "Ang tagpuan ay sumasaklaw sa lokasyon, kapaligiran, at panahong pinangyarihan ng salaysay."
+      },
+      {
+        id: "alamat-q10",
+        number: 10,
+        category: "Aral",
+        questionType: "multiple_choice",
+        difficulty: "average",
+        points: 2,
+        question: "Alin ang pinakamahalagang aral na maaaring makuha sa alamat na nagpapakita ng pagsasakripisyo ng isang anak para sa kaniyang pamilya?",
+        choices: [
+          { key: "A", text: "Pagiging mayabang" },
+          { key: "B", text: "Pagiging sakim" },
+          { key: "C", text: "Pagmamahal sa pamilya" },
+          { key: "D", text: "Pagiging makasarili" }
+        ],
+        answer: "C",
+        acceptedAnswers: ["C", "c", "Pagmamahal sa pamilya"],
+        explanation: "Ang wagas na pagsasakripisyo ay patunay ng dalisay na pagmamahal at pagmamalasakit sa kapakanan ng pamilya."
+      },
+      {
+        id: "alamat-q11",
+        number: 11,
+        category: "Uri",
+        questionType: "situational",
+        difficulty: "hard",
+        points: 3,
+        question: "Nakabasa ka ng kuwentong nagpapaliwanag kung bakit may iba't ibang uri ng ibon. Anong uri ng alamat ang maaaring kumatawan dito?",
+        choices: null,
+        answer: "Alamat ng hayop",
+        acceptedAnswers: ["Alamat ng hayop", "alamat ng hayop"],
+        explanation: "Ang mga kuwento hinggil sa mga ibon, isda, o iba pang nilalang ay nauuri bilang alamat ng hayop."
+      },
+      {
+        id: "alamat-q12",
+        number: 12,
+        category: "Pagsusuri",
+        questionType: "fill_in_blank",
+        difficulty: "hard",
+        points: 3,
+        question: "Sa pagsusuri ng alamat, mahalagang alamin ang __________ ng mga kilos at desisyon ng pangunahing tauhan upang maunawaan ang kabuuang kuwento.",
+        choices: null,
+        answer: "Dahilan",
+        acceptedAnswers: ["Dahilan", "dahilan", "kadahilanan", "sanhi"],
+        explanation: "Ang motibasyon o dahilan sa likod ng bawat kilos ng tauhan ang nagpapaliwanag sa takbo ng mga pangyayari."
+      },
+      {
+        id: "alamat-q13",
+        number: 13,
+        category: "Kahulugan",
+        questionType: "multiple_choice",
+        difficulty: "average",
+        points: 2,
+        question: "Bakit mahalagang pag-aralan ang mga alamat?",
+        choices: [
+          { key: "A", text: "Upang makalimutan ang nakaraan" },
+          { key: "B", text: "Upang maunawaan ang kultura at paniniwala ng mga ninuno" },
+          { key: "C", text: "Upang matutuhan ang mga balita" },
+          { key: "D", text: "Upang malaman ang mga makabagong teknolohiya" }
+        ],
+        answer: "B",
+        acceptedAnswers: ["B", "b", "Upang maunawaan ang kultura at paniniwala ng mga ninuno"],
+        explanation: "Sinasalamin ng mga alamat ang mayamang kultura, tradisyon, at pilosopiya ng ating mga ninuno."
+      },
+      {
+        id: "alamat-q14",
+        number: 14,
+        category: "Pagsusuri",
+        questionType: "true_false",
+        difficulty: "hard",
+        points: 3,
+        question: "Sa pagsusuri ng alamat, dapat lamang bigyang-pansin ang pamagat at hindi na kailangang unawain ang mga kilos ng tauhan.",
+        choices: [
+          { key: "True", text: "Tama (True)" },
+          { key: "False", text: "Mali (False)" }
+        ],
+        answer: "False",
+        acceptedAnswers: ["False", "false", "mali", "Mali"],
+        explanation: "Ang komprehensibong pagsusuri ay nangangailangan ng masusing pagtingin sa kilos, motibo, at transpormasyon ng mga tauhan, hindi lamang sa pamagat."
+      },
+      {
+        id: "alamat-q15",
+        number: 15,
+        category: "Aral",
+        questionType: "situational",
+        difficulty: "hard",
+        points: 3,
+        question: "Isang tauhan ang nagsisi matapos niyang saktan ang damdamin ng kaniyang kaibigan at humingi siya ng tawad. Anong pagpapahalaga ang ipinapakita nito?",
+        choices: null,
+        answer: "Pagpapakumbaba",
+        acceptedAnswers: ["Pagpapakumbaba", "pagpapakumbaba", "pagkumbaba", "pagiging mapagpakumbaba"],
+        explanation: "Ang pag-amin sa sariling pagkakamali at paghingi ng tawad ay marangal na katangian ng pagpapakumbaba."
+      }
+    ]
+  },
+
+  "maikling-kwento": {
+    id: "maikling-kwento",
+    title: "Maikling Kwento",
+    badge: "Maikling Kwento",
+    themeClass: "deck-maikling-kwento",
+    icon: "📖",
+    accentColor: "#00663D",
+    centerColor: "#D9EFDC",
+    borderColor: "#294629",
+    cornerNum: "01✦",
+    cornerDecor: "✦10",
+    cardCount: 15,
+    questionCount: 15,
+    competency: "Nasusuri ang mga elemento, uri, at bahagi ng banghay sa maikling kuwento.",
+    description: "Pagsusuri sa banghay, kasukdulan, tagpuan, tauhan, tema, at aral sa maikling kuwento.",
+    subtopics: ["Kahulugan", "Elemento", "Uri", "Bahagi ng Banghay", "Tauhan", "Tagpuan", "Aral", "Pagsusuri"],
+    questions: [
+      {
+        id: "mk-q1",
+        number: 1,
+        category: "Kahulugan",
+        questionType: "multiple_choice",
+        difficulty: "easy",
+        points: 1,
+        question: "Ano ang maikling kuwento?",
+        choices: [
+          { key: "A", text: "Isang mahabang salaysay tungkol sa kasaysayan" },
+          { key: "B", text: "Isang akdang pampanitikan na naglalahad ng isang mahalagang pangyayari sa buhay ng tauhan" },
+          { key: "C", text: "Isang tulang may sukat at tugma" },
+          { key: "D", text: "Isang tekstong nagbibigay ng balita" }
+        ],
+        answer: "B",
+        acceptedAnswers: ["B", "b", "Isang akdang pampanitikan na naglalahad ng isang mahalagang pangyayari sa buhay ng tauhan"],
+        explanation: "Ang maikling kuwento ay maikling kathang pampanitikan na nagsasalaysay ng isang mahalagang pangyayaring kinasasangkutan ng isa o ilang tauhan."
+      },
+      {
+        id: "mk-q2",
+        number: 2,
+        category: "Elemento",
+        questionType: "identification",
+        difficulty: "easy",
+        points: 1,
+        question: "Ano ang tawag sa taong gumaganap sa isang kuwento?",
+        choices: null,
+        answer: "Tauhan",
+        acceptedAnswers: ["Tauhan", "tauhan", "mga tauhan"],
+        explanation: "Ang tauhan ang lumilikha at kumikilos sa mga sitwasyon at tunggalian ng akda."
+      },
+      {
+        id: "mk-q3",
+        number: 3,
+        category: "Katangian",
+        questionType: "true_false",
+        difficulty: "easy",
+        points: 1,
+        question: "Ang maikling kuwento ay karaniwang nakatuon sa isang pangunahing pangyayari o suliranin.",
+        choices: [
+          { key: "True", text: "Tama (True)" },
+          { key: "False", text: "Mali (False)" }
+        ],
+        answer: "True",
+        acceptedAnswers: ["True", "true", "tama", "Tama"],
+        explanation: "Dahil sa kakintalan o iisang impresyon nito, umiikot ito sa iisang pangunahing suliranin."
+      },
+      {
+        id: "mk-q4",
+        number: 4,
+        category: "Elemento",
+        questionType: "situational",
+        difficulty: "easy",
+        points: 1,
+        question: "Isang kuwento ang naganap sa isang maliit na baryo noong panahon ng tag-ulan. Anong elemento ang inilalarawan nito?",
+        choices: null,
+        answer: "Tagpuan",
+        acceptedAnswers: ["Tagpuan", "tagpuan"],
+        explanation: "Ang maliit na baryo (lugar) at tag-ulan (panahon/klima) ay bumubuo sa tagpuan ng kuwento."
+      },
+      {
+        id: "mk-q5",
+        number: 5,
+        category: "Elemento",
+        questionType: "multiple_choice",
+        difficulty: "easy",
+        points: 1,
+        question: "Alin sa mga sumusunod ang HINDI elemento ng maikling kuwento?",
+        choices: [
+          { key: "A", text: "Tauhan" },
+          { key: "B", text: "Tagpuan" },
+          { key: "C", text: "Banghay" },
+          { key: "D", text: "Sukat at tugma" }
+        ],
+        answer: "D",
+        acceptedAnswers: ["D", "d", "Sukat at tugma"],
+        explanation: "Ang sukat at tugma ay mga elemento ng tula, hindi ng tuluyang prosa tulad ng maikling kuwento."
+      },
+      {
+        id: "mk-q6",
+        number: 6,
+        category: "Elemento",
+        questionType: "fill_in_blank",
+        difficulty: "average",
+        points: 2,
+        question: "Ang __________ ay tumutukoy sa pagkakasunod-sunod ng mga pangyayari sa kuwento.",
+        choices: null,
+        answer: "Banghay",
+        acceptedAnswers: ["Banghay", "banghay"],
+        explanation: "Ang banghay ang estruktura o balangkas ng mga pangyayari sa isang salaysay."
+      },
+      {
+        id: "mk-q7",
+        number: 7,
+        category: "Bahagi ng Banghay",
+        questionType: "identification",
+        difficulty: "average",
+        points: 2,
+        question: "Ano ang tawag sa pinakamataas na bahagi ng tensiyon o kapanabikan sa kuwento?",
+        choices: null,
+        answer: "Kasukdulan",
+        acceptedAnswers: ["Kasukdulan", "kasukdulan"],
+        explanation: "Sa kasukdulan (climax) nararanasan ang pinakamatinding damdamin at doon nagpapasya ang kahihinatnan ng tunggalian."
+      },
+      {
+        id: "mk-q8",
+        number: 8,
+        category: "Uri",
+        questionType: "multiple_choice",
+        difficulty: "average",
+        points: 2,
+        question: "Anong uri ng maikling kuwento ang nagbibigay-diin sa pagbabago o pag-unlad ng pagkatao ng pangunahing tauhan?",
+        choices: [
+          { key: "A", text: "Kuwento ng tauhan" },
+          { key: "B", text: "Kuwento ng katatawanan" },
+          { key: "C", text: "Kuwento ng katatakutan" },
+          { key: "D", text: "Kuwento ng kababalaghan" }
+        ],
+        answer: "A",
+        acceptedAnswers: ["A", "a", "Kuwento ng tauhan"],
+        explanation: "Sa kuwento ng tauhan, nakatutok ang salaysay sa pag-uugali, kilos, at pagbabagong sikolohikal ng karakter."
+      },
+      {
+        id: "mk-q9",
+        number: 9,
+        category: "Bahagi ng Banghay",
+        questionType: "true_false",
+        difficulty: "easy",
+        points: 1,
+        question: "Ang wakas ang bahaging nagpapakita ng resolusyon o kinahinatnan ng suliranin sa kuwento.",
+        choices: [
+          { key: "True", text: "Tama (True)" },
+          { key: "False", text: "Mali (False)" }
+        ],
+        answer: "True",
+        acceptedAnswers: ["True", "true", "tama", "Tama"],
+        explanation: "Ang wakas o kakalasan ang nagpapakita ng kinalabasan ng labanan at ang bagong kalagayan ng mga tauhan."
+      },
+      {
+        id: "mk-q10",
+        number: 10,
+        category: "Bahagi ng Banghay",
+        questionType: "situational",
+        difficulty: "hard",
+        points: 3,
+        question: "Sa kuwento, unti-unting nalaman ng pangunahing tauhan ang lihim ng kaniyang pamilya. Anong bahagi ng banghay ang maaaring magpakita ng unti-unting pag-usad ng mga pangyayari patungo sa kasukdulan?",
+        choices: null,
+        answer: "Pataas na Aksyon",
+        acceptedAnswers: ["Pataas na Aksyon", "pataas na aksyon", "pataas na aksiyon", "saglit na kasiglahan"],
+        explanation: "Ang pataas na aksyon o saglit na kasiglahan ang nagtutulak sa mga suliranin patungo sa kapana-panabik na kasukdulan."
+      },
+      {
+        id: "mk-q11",
+        number: 11,
+        category: "Tauhan",
+        questionType: "multiple_choice",
+        difficulty: "average",
+        points: 2,
+        question: "Alin ang tumutukoy sa pangunahing tauhan na sentro ng mga pangyayari sa kuwento?",
+        choices: [
+          { key: "A", text: "Katunggali" },
+          { key: "B", text: "Pantulong na tauhan" },
+          { key: "C", text: "Protagonista" },
+          { key: "D", text: "Tagapagsalaysay" }
+        ],
+        answer: "C",
+        acceptedAnswers: ["C", "c", "Protagonista"],
+        explanation: "Ang protagonista ang bida o pangunahing tauhan kung kanino umiikot ang kuwento."
+      },
+      {
+        id: "mk-q12",
+        number: 12,
+        category: "Elemento",
+        questionType: "identification",
+        difficulty: "average",
+        points: 2,
+        question: "Ano ang tawag sa aral o mensaheng nais ipabatid ng kuwento?",
+        choices: null,
+        answer: "Tema",
+        acceptedAnswers: ["Tema", "tema", "paksa", "Paksa"],
+        explanation: "Ang tema ang sentral na kaisipan, aral, o mensahe ng akda."
+      },
+      {
+        id: "mk-q13",
+        number: 13,
+        category: "Uri",
+        questionType: "fill_in_blank",
+        difficulty: "hard",
+        points: 3,
+        question: "Ang __________ ay uri ng maikling kuwentong naglalayong magpatawa sa mga mambabasa.",
+        choices: null,
+        answer: "Katatawanan",
+        acceptedAnswers: ["Katatawanan", "katatawanan"],
+        explanation: "Ang kuwento ng katatawanan ay sadyang isinulat upang magdulot ng aliw, saya, at tawanan."
+      },
+      {
+        id: "mk-q14",
+        number: 14,
+        category: "Pagsusuri",
+        questionType: "multiple_choice",
+        difficulty: "average",
+        points: 2,
+        question: "Bakit mahalagang suriin ang maikling kuwento?",
+        choices: [
+          { key: "A", text: "Upang malaman lamang ang haba nito" },
+          { key: "B", text: "Upang maunawaan ang mensahe, tauhan, at mga pangyayari" },
+          { key: "C", text: "Upang bilangin ang mga salita" },
+          { key: "D", text: "Upang malaman ang presyo ng aklat" }
+        ],
+        answer: "B",
+        acceptedAnswers: ["B", "b", "Upang maunawaan ang mensahe, tauhan, at mga pangyayari"],
+        explanation: "Ang pagsusuri ay nagpapalalim ng ating pang-unawa sa pahiwatig, istruktura, at kabuluhan ng mga karanasan sa kuwento."
+      },
+      {
+        id: "mk-q15",
+        number: 15,
+        category: "Aral",
+        questionType: "situational",
+        difficulty: "hard",
+        points: 3,
+        question: "Isang tauhan ang nagsinungaling upang makaiwas sa pananagutan, ngunit sa huli ay nawalan siya ng tiwala ng kaniyang mga kaibigan. Anong aral ang maaaring makuha sa kuwento?",
+        choices: null,
+        answer: "Katapatan",
+        acceptedAnswers: ["Katapatan", "katapatan", "pagiging matapat"],
+        explanation: "Ang aral ay nagpapatunay na ang katapatan ay pundasyon ng tiwala at mabuting pakikipagkapwa."
+      }
+    ]
   }
 };
+
+// Helper object mapping quizzes specifically
+const PANITIKARD_QUIZZES = {
+  alamat: PANITIKARD_DECKS.alamat,
+  "maikling-kwento": PANITIKARD_DECKS["maikling-kwento"]
+};
+
+// Export for Node.js test environment if applicable
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    PANITIKARD_CARD_TYPES,
+    PANITIKARD_DECKS,
+    PANITIKARD_QUIZZES
+  };
+}

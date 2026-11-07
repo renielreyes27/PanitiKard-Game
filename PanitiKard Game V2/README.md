@@ -89,15 +89,75 @@ PanitiKard Game V2/
 - **Renderer Compatibility**:
   - `main.js` and `style.css` support both Multiple Choice (2x2 grid) and Open Response presentation with hint/timer badges and back-face keyword badges.
 
+### Phase 3: Core Gameplay Mechanics Implementation
+- **Interactive Multiple Choice Grading**:
+  - Single-choice selection with visual confirmation.
+  - Immediate feedback indicating correct (`✓`) or incorrect (`✗`) selections.
+  - Automatically highlights the correct answer on error for formative learning.
+  - 1 point awarded for correct answers.
+- **Open-Ended Response Architecture**:
+  - Textarea input for Statement, Correction, Bonus, Reverse, Help, and Challenge cards.
+  - Clean submission flow structured for future Gemini AI evaluation API integration.
+  - Does not rely on rigid keyword matching as a final grading gate.
+  - Hint toggle support for Help cards (`💡 Ipakita ang Pahiwatig`).
+- **Card Progression & Flip Security**:
+  - Cards cannot be flipped before an answer is submitted, preventing premature answer exposure.
+  - Sequential progression locks: students must submit an answer to unlock the next card and review the back.
+  - Duplicate submissions are prevented once an answer is logged.
+  - Smooth auto-flip upon submission reveals the official answer and literary explanation.
+- **Challenge Card 30-Second Countdown**:
+  - Active real-time countdown timer with visual warning pulse at $\le 10$ seconds.
+  - Automatically submits and ends attempt when time runs out.
+- **Curriculum Scoring Rules (7 Points Total Max)**:
+  - Question: 1 pt
+  - Statement: 1 pt
+  - Correction: 1 pt
+  - Bonus: 2 pts (Double score)
+  - Reverse: 0 pts (Unscored review card)
+  - Help: 1 pt
+  - Challenge: 1 pt
+- **Comprehensive Results Screen (`#result-screen`)**:
+  - Total score display (out of 7 points) and mastery percentage.
+  - Personalized student greeting and qualitative feedback badge.
+  - 7-Card detailed review list displaying student answer, correct answer, points earned, literary explanation, and key conceptual terms.
+  - "Subukan Muli ang Deck" (Retry) and "Pumili ng Ibang Topic Deck" actions.
+
+### Phase 1 Frontend Update: Welcome Screen & Student Setup (Matches Official Design)
+- **Screen 1 – Welcome Screen (`#welcome-screen`)**:
+  - Dark forest green header (`#193822`) with circular hamburger menu button and cursive script logo (`Pacifico`).
+  - Uppercase `WELCOME TO THE GAME` lead with dark green 4-point star `✦`.
+  - Display serif heading: `Welcome to PanitiKard` (`Fraunces`).
+  - Warm handwritten subtitle & introduction (`Caveat`):
+    - *"Tuklasin ang saya ng pagkatuto sa pamamagitan ng laro!"*
+    - *"Ang PanitiKard ay isang interactive card game na naglalayong paunlarin ang kaalaman at kasanayan ng mga mag-aaral sa wikang Filipino sa isang masaya at makabuluhang paraan."*
+  - Interactive Role Login Buttons with 3D offset drop shadows (`#b7cbb8` fill, `6px 6px 0px #193822`):
+    - `STUDENT LOGIN` -> Direct transition to Student Setup.
+    - `TEACHER/ ADMIN LOGIN` -> Informative modal explaining teacher portal integration with option to test as student.
+  - Bottom banner with sage green pill background and dark forest green footer:
+    - *"Handa ka na bang maglaro at matuto?"*
+    - *"Piliin ang iyong role at simulan ang iyong PanitiKard journey!"*
+- **Screen 2 – Student Setup / Game Introduction (`#setup-screen`)**:
+  - Top Card: White card with `Baitang 10 • Filipino` dark pill, 4-point star `✦`, `Matuto sa bawat kard.` heading, instructions, and sage green input field with gold border for student name entry.
+  - Bottom Card: White card with `Handa ka na bang maglaro?` heading and game instructions.
+  - Header `◀ Back` navigation returning to the Welcome Screen.
+
+### Phase 4 Step 1 & Step 3: Backend & Supabase Service Layer Preparation
+- **Server Architecture**: Node.js v24 + Express backend in isolated `server/` directory.
+- **Supabase SDK Integration**: `@supabase/supabase-js` installed in `server/`.
+- **Centralized Service (`server/src/services/supabase.js`)**:
+  - Centralized Supabase client initialization via environment variables.
+  - Graceful standalone development fallback when credentials are not yet configured.
+  - Server-side credential isolation (service role key is never exposed to client).
+  - Status helper function exposed in `GET /health`.
+- **Security & Git Ignore**: `.env` strictly ignored by Git; `.env.example` provided with non-sensitive placeholders.
+
 ---
 
-## ⚠️ Current Scope & Remaining Unfinished Items
+## ⚠️ Current Scope & Remaining Items
 
-The project maintains strict boundaries for Phase 2.5:
-- **No scoring or answer evaluation**: Option pills are interactive previews and do not deduct or add points yet.
-- **No timers or automated rounds**: Students can browse and flip cards at their own pace.
-- **No database or Canva SDK**: Kept strictly as a standalone client-side browser application.
-- **Future Phase 3**: Implementation of active gameplay mode (scoring, score counter, streak bonuses, answer validation, and final Results/Review screen).
+- **Phase 4 Step 4 Target**: Database Table Creation and SQL Migrations in Supabase.
+- **Phase 4 Step 5 Target**: Client-to-Backend REST API connections for session persistence and student records.
+- **Phase 5 Target**: Gemini AI Live API integration for natural language evaluation of open-ended literary responses.
 
 ---
 
