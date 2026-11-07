@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="fil">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PanitiKard V2 - Digital na Pagkatutong Pampanitikan</title>
+  <meta name="description"
+    content="PanitiKard V2 - Isang interaktibong educational card game para sa Filipino at Panitikan">
+
+  <!-- Google Fonts: Fraunces (Classical Literary Serif) & Plus Jakarta Sans (Modern Geometric Sans) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;0,9..144,800;1,9..144,600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+
+  <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+  <!-- Header / Navigation Bar -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="logo">
+        <span class="logo-icon" aria-hidden="true">🎴</span>
+        <div class="logo-group">
+          <span class="logo-text">PanitiKard <span class="badge">V2</span></span>
+          <span class="logo-tagline">Digital na Pagkatutong Pampanitikan</span>
+        </div>
+      </div>
+      <div class="header-status">
+        <span class="status-indicator" aria-hidden="true"></span>
+        <span>Handa na</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Game Shell / Container -->
+  <main class="app-main">
+
+    <!-- Screen 1: Welcome and Student Profile Setup -->
+    <section id="setup-screen" class="game-screen">
+      <div class="screen-card setup-card">
+
+        <!-- Welcome Hero Banner -->
+        <header class="screen-intro">
+          <span class="grade-pill">Baitang 10 &bull; Filipino</span>
+          <h1 class="screen-title">Maligayang Pagdating sa PanitiKard!</h1>
+          <p class="screen-subtitle">
+            Tuklasin ang kagandahan ng panitikang Filipino sa pamamagitan ng mga makukulay na kard ng karunungan.
+          </p>
+        </header>
+
+        <!-- Player Pass Teaser Card -->
+        <div class="player-pass-preview" aria-hidden="true">
+          <div class="pass-chip">🎴 PanitiKard Pass</div>
+          <div class="pass-avatar">🎓</div>
+          <div class="pass-details">
+            <span class="pass-title">Manlalaro ng Panitikan</span>
+            <span class="pass-sub">Ipasok ang pangalan upang i-unlock ang mga deck</span>
+          </div>
+        </div>
+
+        <!-- Validation Alert Banner -->
+        <div id="validation-banner" class="alert-box alert-error hidden" role="alert" aria-live="polite">
+          <span class="alert-icon" aria-hidden="true">⚠️</span>
+          <span id="validation-text" class="alert-message"></span>
+        </div>
+
+        <form id="setup-form" novalidate>
+
+          <!-- Student Name Section (Centered & Clean) -->
+          <div class="form-section setup-form-group">
+            <label for="student-name" class="setup-label">
+              <span>Pangalan ng Mag-aaral</span>
+            </label>
+            <div class="input-wrapper">
+              <input type="text" id="student-name" name="studentName" class="text-input"
+                placeholder="Halimbawa: Juan Dela Cruz" maxlength="60" autocomplete="name" required>
+            </div>
+            <span class="input-hint">Gagamitin ang iyong pangalan sa bawat kard at marka ng karunungan.</span>
+          </div>
+
+          <!-- Action Button Area -->
+          <div class="form-actions">
+            <button type="submit" id="btn-start-game" class="btn btn-primary btn-large">
+              <span>Pumili ng Topic Deck</span>
+              <span class="btn-arrow" aria-hidden="true">&rarr;</span>
+            </button>
+          </div>
+
+        </form>
+      </div>
+    </section>
+
+    <!-- Screen 2: Topic Deck Screen (Streamlined from Phase 1 & 2) -->
+    <section id="deck-screen" class="game-screen hidden" aria-labelledby="deck-screen-title">
+      <div class="screen-card">
+
+        <!-- Player Badge Strip -->
+        <div class="player-profile-strip">
+          <div class="player-profile-badge">
+            <span class="player-avatar-mini" aria-hidden="true">👤</span>
+            <span class="player-label">Manlalaro:</span>
+            <strong id="deck-student-name" class="student-highlight">-</strong>
+          </div>
+          <button type="button" id="btn-edit-student-name" class="btn-text-action" title="Baguhin ang iyong pangalan">
+            <span>✏️ Palitan ang Pangalan</span>
+          </button>
+        </div>
+
+        <header class="screen-intro">
+          <span class="grade-pill">Topic Decks &bull; Baitang 10</span>
+          <h1 id="deck-screen-title" class="screen-title">Pumili ng Topic Deck</h1>
+          <p class="screen-subtitle">
+            Piliin ang kabanatang nais mong buksan. Bawat deck ay may pitong (7) natatanging uri ng kard pampanitikan.
+          </p>
+        </header>
+
+        <div class="deck-grid" role="radiogroup" aria-label="Pagpili ng Deck">
+
+          <!-- Deck 1: Mga Elemento ng Akda -->
+          <div class="deck-box deck-elements" data-deck-id="elements" role="radio" aria-checked="true" tabindex="0">
+            <div class="deck-top-stripe"></div>
+            <div class="deck-content">
+              <div class="deck-icon-badge" aria-hidden="true">✍️</div>
+              <div class="deck-badge-pill">Deck #01</div>
+              <h2 class="deck-title">Mga Elemento ng Akda</h2>
+              <p class="deck-description">
+                Pagsusuri sa banghay, tauhan, tagpuan, at tunggalian mula sa mga klasikong akda gaya ng <em>Ang Matanda
+                  at ang Dagat</em> at <em>Ang Kwintas</em>.
+              </p>
+
+              <div class="deck-stats">
+                <span class="deck-stat-item">🎴 7 Uri ng Kard</span>
+                <span class="deck-stat-item">📚 Banghay at Tauhan</span>
+              </div>
+
+              <div class="deck-card-types-preview">
+                <span class="pill-chip">Tanong (Question)</span>
+                <span class="pill-chip">Pahayag (Statement)</span>
+                <span class="pill-chip">Pagwawasto (Correction)</span>
+                <span class="pill-chip">Bonus</span>
+                <span class="pill-chip">Baligtaran</span>
+                <span class="pill-chip">Gabay</span>
+                <span class="pill-chip">Hamon</span>
+              </div>
+            </div>
+
+            <div class="deck-select-tag">
+              <span class="check-icon">✓</span>
+              <span>Aktibong Deck</span>
+            </div>
+          </div>
+
+          <!-- Deck 2: Pagpapakahulugan sa Pahayag -->
+          <div class="deck-box deck-meaning" data-deck-id="meaning" role="radio" aria-checked="false" tabindex="0">
+            <div class="deck-top-stripe"></div>
+            <div class="deck-content">
+              <div class="deck-icon-badge" aria-hidden="true">💡</div>
+              <div class="deck-badge-pill">Deck #02</div>
+              <h2 class="deck-title">Pagpapakahulugan sa Pahayag</h2>
+              <p class="deck-description">
+                Pagsusuri sa mga pahiwatig, tayutay (pagtutulad, pagwawangis, pagsasatao), matatalinghagang diwa, at
+                simbolismong pampanitikan.
+              </p>
+
+              <div class="deck-stats">
+                <span class="deck-stat-item">🎴 7 Uri ng Kard</span>
+                <span class="deck-stat-item">📖 Pahiwatig at Tayutay</span>
+              </div>
+
+              <div class="deck-card-types-preview">
+                <span class="pill-chip">Tanong (Question)</span>
+                <span class="pill-chip">Pahayag (Statement)</span>
+                <span class="pill-chip">Pagwawasto (Correction)</span>
+                <span class="pill-chip">Bonus</span>
+                <span class="pill-chip">Baligtaran</span>
+                <span class="pill-chip">Gabay</span>
+                <span class="pill-chip">Hamon</span>
+              </div>
+            </div>
+
+            <div class="deck-select-tag">
+              <span class="check-icon">✓</span>
+              <span>Aktibong Deck</span>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="form-actions flex-actions">
+          <button type="button" id="btn-back-to-setup" class="btn btn-secondary">
+            <span>&larr; Bumalik sa Panimula</span>
+          </button>
+          <button type="button" id="btn-enter-deck" class="btn btn-primary btn-large">
+            <span>Buksan ang Deck at Tingnan ang mga Kard</span>
+            <span class="btn-arrow" aria-hidden="true">&rarr;</span>
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Screen 3: Card Arena & 3D Flip Card Screen -->
+    <section id="card-screen" class="game-screen hidden" aria-labelledby="card-screen-title">
+      <div class="screen-card card-arena-card">
+
+        <!-- Screen Header & Info Bar -->
+        <header class="card-screen-header">
+          <div class="card-screen-top-bar">
+            <button type="button" id="btn-crumb-deck" class="btn-crumb" title="Bumalik sa Pagpili ng Deck">
+              <span>&larr; Mga Deck</span>
+            </button>
+            <div class="card-screen-meta">
+              <span id="card-deck-indicator" class="deck-indicator-pill">Deck: -</span>
+              <span id="card-student-indicator" class="student-indicator-pill">Mag-aaral: -</span>
+            </div>
+          </div>
+
+          <h1 id="card-screen-title" class="screen-title card-arena-title">Interaktibong 3D Flip Kard</h1>
+          <p class="screen-subtitle card-arena-sub">
+            I-tap o i-click ang kard upang baligtarin at pag-aralan ang pampanitikang paliwanag.
+          </p>
+        </header>
+
+        <!-- 7 Card Types Navigation Switcher with Fading Scroll Container -->
+        <div class="card-type-switcher-container">
+          <div id="card-type-tabs" class="card-type-tabs" role="tablist" aria-label="Mga Uri ng Kard">
+            <button type="button" class="type-tab active" data-type="question" role="tab" aria-selected="true">
+              <span class="tab-icon">❓</span>
+              <span class="tab-label-group">
+                <span class="tab-main-text">Tanong</span>
+                <span class="tab-sub-text">Question</span>
+              </span>
+            </button>
+            <button type="button" class="type-tab" data-type="statement" role="tab" aria-selected="false">
+              <span class="tab-icon">📜</span>
+              <span class="tab-label-group">
+                <span class="tab-main-text">Pahayag</span>
+                <span class="tab-sub-text">Statement</span>
+              </span>
+            </button>
+            <button type="button" class="type-tab" data-type="correction" role="tab" aria-selected="false">
+              <span class="tab-icon">✏️</span>
+              <span class="tab-label-group">
+                <span class="tab-main-text">Pagwawasto</span>
+                <span class="tab-sub-text">Correction</span>
+              </span>
+            </button>
+            <button type="button" class="type-tab" data-type="bonus" role="tab" aria-selected="false">
+              <span class="tab-icon">⭐</span>
+              <span class="tab-label-group">
+                <span class="tab-main-text">Bonus</span>
+                <span class="tab-sub-text">Bonus Kard</span>
+              </span>
+            </button>
+            <button type="button" class="type-tab" data-type="reverse" role="tab" aria-selected="false">
+              <span class="tab-icon">🔄</span>
+              <span class="tab-label-group">
+                <span class="tab-main-text">Baligtaran</span>
+                <span class="tab-sub-text">Reverse</span>
+              </span>
+            </button>
+            <button type="button" class="type-tab" data-type="help" role="tab" aria-selected="false">
+              <span class="tab-icon">💡</span>
+              <span class="tab-label-group">
+                <span class="tab-main-text">Gabay</span>
+                <span class="tab-sub-text">Help</span>
+              </span>
+            </button>
+            <button type="button" class="type-tab" data-type="challenge" role="tab" aria-selected="false">
+              <span class="tab-icon">⚔️</span>
+              <span class="tab-label-group">
+                <span class="tab-main-text">Hamon</span>
+                <span class="tab-sub-text">Challenge</span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 3D Flip Card Scene (Optimized for Viewport Fit) -->
+        <div class="card-stage">
+          <div class="card-perspective">
+
+            <div id="interactive-card" class="playing-card" tabindex="0" role="region"
+              aria-label="Interaktibong 3D Flip Kard. Pindutin upang baligtarin.">
+
+              <!-- CARD FRONT (Harap ng Kard) -->
+              <div class="card-face card-front">
+                <div class="card-decor-border">
+
+                  <!-- Top Row -->
+                  <div class="card-face-header">
+                    <div class="corner-brand">
+                      <span id="front-card-num" class="corner-number">01</span>
+                      <span class="corner-star">✦</span>
+                    </div>
+                    <div id="front-card-type-badge" class="card-type-pill">
+                      <span class="type-badge-icon">❓</span>
+                      <span class="type-badge-text">Tanong &bull; Question</span>
+                    </div>
+                    <div id="front-deck-badge" class="deck-tag-pill">Mga Elemento</div>
+                  </div>
+
+                  <!-- Center Body -->
+                  <div class="card-face-body">
+                    <div class="card-illustration-wrap">
+                      <div id="front-card-icon" class="card-hero-icon" aria-hidden="true">❓</div>
+                    </div>
+
+                    <h2 id="front-card-title" class="card-front-title">Pagsusuri sa Tagpuan at Atmospera</h2>
+
+                    <div class="prompt-box">
+                      <p id="front-card-prompt" class="card-front-prompt">
+                        Naglo-load ng tanong...
+                      </p>
+                    </div>
+
+                    <!-- Interactive Options Grid (2x2 on Desktop, 1 Col on Mobile) -->
+                    <div id="front-card-options" class="card-options-grid">
+                      <!-- Rendered dynamically -->
+                    </div>
+                  </div>
+
+                  <!-- Bottom Row -->
+                  <div class="card-face-footer">
+                    <div class="flip-interactive-pill" aria-hidden="true">
+                      <span class="flip-pill-icon">🔄</span>
+                      <span>I-tap upang Baligtarin</span>
+                    </div>
+                    <div class="corner-brand corner-flipped">
+                      <span id="front-card-num-bottom" class="corner-number">01</span>
+                      <span class="corner-star">✦</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <!-- CARD BACK (Likod ng Kard) -->
+              <div class="card-face card-back">
+                <div class="card-decor-border card-back-inner">
+
+                  <!-- Top Row -->
+                  <div class="card-face-header">
+                    <div class="corner-brand">
+                      <span id="back-card-num" class="corner-number">01</span>
+                      <span class="corner-star">✦</span>
+                    </div>
+                    <div class="card-type-pill back-pill">
+                      <span class="type-badge-icon">📖</span>
+                      <span class="type-badge-text">Likod &bull; Paliwanag</span>
+                    </div>
+                    <div class="deck-tag-pill">Pampanitikan</div>
+                  </div>
+
+                  <!-- Back Content -->
+                  <div class="card-face-body back-body">
+                    <div class="back-answer-banner">
+                      <div class="answer-header-wrap">
+                        <span class="answer-check-icon">✓</span>
+                        <span class="answer-badge-title">Tamang Sagot / Pagwawasto:</span>
+                      </div>
+                      <span id="back-answer-highlight" class="answer-badge-val">-</span>
+                    </div>
+
+                    <div class="back-explanation-card">
+                      <h3 class="explanation-title">📚 Pampanitikang Paliwanag:</h3>
+                      <p id="back-explanation-text" class="explanation-text">
+                        Naglo-load ng paliwanag...
+                      </p>
+                    </div>
+
+                    <div class="back-trivia-box">
+                      <h4 class="trivia-title">✨ Alam Mo Ba?</h4>
+                      <p id="back-trivia-text" class="trivia-text">
+                        Naglo-load ng karagdagang kaalaman...
+                      </p>
+                    </div>
+                  </div>
+
+                  <!-- Bottom Row -->
+                  <div class="card-face-footer">
+                    <div class="flip-interactive-pill" aria-hidden="true">
+                      <span class="flip-pill-icon">🔄</span>
+                      <span>I-tap upang Bumalik sa Harap</span>
+                    </div>
+                    <div class="corner-brand corner-flipped">
+                      <span id="back-card-num-bottom" class="corner-number">01</span>
+                      <span class="corner-star">✦</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Compact Floating Controls Toolbar -->
+        <div class="card-controls-panel">
+          <div class="card-toolbar-pill">
+            <button type="button" id="btn-prev-card" class="toolbar-btn" title="Nakaraang Uri ng Kard">
+              <span>&larr; Nakaraan</span>
+            </button>
+            <button type="button" id="btn-flip-card" class="toolbar-btn btn-flip-accent" title="I-flip ang kard">
+              <span>🔄 I-flip ang Kard</span>
+            </button>
+            <button type="button" id="btn-next-card" class="toolbar-btn" title="Susunod na Uri ng Kard">
+              <span>Susunod &rarr;</span>
+            </button>
+          </div>
+
+          <div class="card-footer-nav">
+            <button type="button" id="btn-back-to-deck" class="btn btn-outline btn-compact">
+              <span>&larr; Pumili ng Ibang Topic Deck</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="app-footer">
+    <div class="footer-container">
+      <p>PanitiKard V2 &bull; Digital na Pagkatutong Pampanitikan para sa mga Mag-aaral ng Filipino</p>
+      <p class="footer-sub">HTML, CSS, at Vanilla JavaScript &bull; Walang Panlabas na Dependencies</p>
+    </div>
+  </footer>
+
+  <!-- Scripts: Educational Card Data then Main Controller -->
+  <script src="js/cards-data.js"></script>
+  <script src="js/main.js"></script>
+</body>
+
+</html>
