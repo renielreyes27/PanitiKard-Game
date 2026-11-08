@@ -1469,11 +1469,14 @@ body {
 }
 
 .card-submit-row {
+  grid-column: 1 / -1;
+  width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 10px;
+  padding: 4px 0 2px;
   flex-wrap: wrap;
 }
 
@@ -3367,6 +3370,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-shrink: 0;
 }
 
 .uno-face-footer {
@@ -3378,21 +3382,46 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-start;
+  flex-shrink: 0;
 }
 
-/* Minimalist Central Card Surface */
+/* Minimalist Central Card Surface (Internally Vertically Scrollable) */
 .uno-card-center-oval {
   background: #ffffff;
   border-radius: 16px;
   padding: 14px 16px;
   margin: 2px 0;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(24, 91, 85, 0.28) transparent;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   border: 1px solid rgba(0, 0, 0, 0.05);
   z-index: 5;
   position: relative;
+}
+
+.uno-card-center-oval::-webkit-scrollbar {
+  width: 5px;
+}
+
+.uno-card-center-oval::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.uno-card-center-oval::-webkit-scrollbar-thumb {
+  background: rgba(24, 91, 85, 0.28);
+  border-radius: 4px;
+}
+
+.uno-card-center-oval::-webkit-scrollbar-thumb:hover {
+  background: rgba(24, 91, 85, 0.45);
 }
 
 /* ==========================================================================
@@ -4035,6 +4064,11 @@ body {
   border: 6px solid #fff;
   border-radius: 14px;
   background: #fff;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 #reverse-screen .card-reverse-front {
@@ -4046,6 +4080,11 @@ body {
 #reverse-screen .card-reverse-front .uno-card-frame {
   border: 6px solid #fff;
   background: #fff;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
 
 #card-screen .card-sequence-yellow { --sequence-color: #f3d54a; --sequence-ink: #9a6b00; }
@@ -4143,6 +4182,16 @@ body {
 #card-screen .card-back-inner-frame,
 #reverse-screen .card-back-inner-frame { min-height: 0; overflow: hidden; }
 
+#card-screen .card-face-body,
+#reverse-screen .card-face-body {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  justify-content: safe center;
+  padding: 4px 0 12px;
+}
+
 #card-screen .card-feedback-panel,
 #reverse-screen .card-feedback-panel {
   position: absolute;
@@ -4232,9 +4281,10 @@ body {
   margin: 0 auto 4px;
 }
 
-#card-screen .playing-card {
-  height: clamp(340px, calc(100dvh - 430px), 590px);
-  min-height: 0;
+#card-screen .playing-card,
+#reverse-screen .playing-card {
+  height: clamp(480px, calc(100dvh - 220px), 590px);
+  min-height: 440px;
 }
 
 #card-screen .card-controls-panel {
@@ -4246,11 +4296,23 @@ body {
   margin-top: 0;
 }
 
+@media (max-width: 768px) {
+  #card-screen .playing-card,
+  #reverse-screen .playing-card {
+    height: clamp(380px, calc(100dvh - 200px), 540px);
+    min-height: 360px;
+  }
+}
+
 @media (max-width: 600px) {
   #card-screen .playing-card,
-  #reverse-screen .playing-card { height: min(72vh, 620px); min-height: 500px; }
-  #card-screen .single-category-header-banner { padding: 9px 11px; }
+  #reverse-screen .playing-card {
+    height: clamp(360px, calc(100dvh - 180px), 520px);
+    min-height: 340px;
+  }
+  #card-screen .single-category-header-banner { padding: 8px 11px; }
   #card-screen .single-category-desc { display: none; }
+  #card-screen .card-arena-sub { display: none; }
   #card-screen .card-toolbar-pill {
     width: 100%;
     justify-content: center;
@@ -4270,14 +4332,6 @@ body {
   #reverse-screen .reverse-action-wrap .btn { width: 100%; }
 }
 
-@media (max-width: 768px) {
-  #card-screen .playing-card {
-    height: clamp(300px, calc(100dvh - 450px), 460px);
-    min-height: 0;
-  }
-
-}
-
 @media (max-height: 680px) {
   #card-screen .card-arena-title,
   #card-screen .card-arena-sub {
@@ -4288,9 +4342,18 @@ body {
     margin-bottom: 4px;
   }
 
-  #card-screen .playing-card {
-    height: clamp(240px, calc(100dvh - 390px), 280px);
-    min-height: 0;
+  #card-screen .single-category-header-wrap {
+    margin-bottom: 4px;
+  }
+
+  #card-screen .card-stage {
+    margin-bottom: 2px;
+  }
+
+  #card-screen .playing-card,
+  #reverse-screen .playing-card {
+    height: clamp(320px, calc(100dvh - 160px), 440px);
+    min-height: 300px;
   }
 }
 

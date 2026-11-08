@@ -1290,7 +1290,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (interactiveCard) {
     interactiveCard.addEventListener("click", (e) => {
-      if (e.target.closest("textarea") || e.target.closest("button") || e.target.closest(".option-pill") || e.target.closest(".card-feedback-panel")) {
+      if (e.target.closest("textarea, button, input, .option-pill, .card-feedback-panel, .uno-card-center-oval")) {
         return;
       }
       toggleCardFlip();
@@ -2331,7 +2331,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (btnReverseFlipCard) btnReverseFlipCard.addEventListener("click", toggleReverseCardFlip);
   if (reverseCard) {
     reverseCard.addEventListener("click", (e) => {
-      if (e.target.closest("input, textarea, button, .quiz-mc-option, .quiz-tf-btn, .card-feedback-panel")) return;
+      if (e.target.closest("input, textarea, button, .quiz-mc-option, .quiz-tf-btn, .card-feedback-panel, .uno-card-center-oval")) return;
       toggleReverseCardFlip();
     });
 
