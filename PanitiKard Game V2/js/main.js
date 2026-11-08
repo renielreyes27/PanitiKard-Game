@@ -5,24 +5,28 @@
  * 
  * Features:
  * 1. Multi-Screen Flow:
- *    Setup -> Topic Deck Selection -> Card Arena -> Final Results.
- * 2. Active Student Identity handling with volatile session state.
- * 3. Multiple Choice Card grading (A-D) with immediate visual feedback.
- * 4. Open-Ended Response handling (Statement, Correction, Bonus, Reverse, Help, Challenge)
- *    structured for future Gemini AI evaluation without rigid keyword pass/fail gating.
- * 5. Progression Security: Card flip is locked until an answer is submitted.
- * 6. Challenge Card 30-second countdown timer with auto-submit on timeout.
- * 7. DepEd/V1 Scoring Rules Preserved:
- *    - Question: 1 pt
- *    - Statement: 1 pt
- *    - Correction: 1 pt
- *    - Bonus: 2 pts (Double points)
- *    - Reverse: 0 pts (Unscored review card)
- *    - Help: 1 pt (With hint reveal)
- *    - Challenge: 1 pt (30s timed challenge)
- *    Total Max Score = 7 Points.
- * 8. Comprehensive Final Results Screen with score breakdown, card-by-card
- *    review, and retry / deck-switch capabilities.
+ *    Welcome -> Student Setup -> Topic Deck Selection -> Card Arena / Quiz ->
+ *    Reverse Round (Second Chance Phase) -> Final Results.
+ * 2. Active Student Identity handling with session state.
+ * 3. UNO-Inspired Card Design with 4 Category Colors:
+ *    - RED: Challenge Cards
+ *    - YELLOW: Bonus Cards
+ *    - BLUE: Analysis Cards (Statement & Correction)
+ *    - GREEN: Knowledge & Definition Cards (Question, Help, Reverse Review)
+ * 4. Exactly ONE Shared Uniform Card-Back Design across all cards:
+ *    Dark-green background, gold decorative border, PanitiKard script,
+ *    and open-book literary emblem. Zero leaked front information.
+ * 5. Realistic 3D Card-Flip Animation:
+ *    Smooth 180° Y-axis rotation (450ms, cubic-bezier(0.4, 0, 0.2, 1)).
+ * 6. Reverse Round Mechanic:
+ *    - Automatically tracks incorrectly answered questions from the main round.
+ *    - Skips automatically if 0 incorrect answers.
+ *    - Up to three (3) second-chance attempts using Special Red Reverse Card.
+ *    - Evaluates answers using existing checking logic; awards second-chance points.
+ *    - Preserves original main-round answers and records without overwriting.
+ * 7. System & Score Integration:
+ *    Main Round Score + Reverse Round Points = Updated Final Total Score.
+ * 8. Comprehensive Final Results Screen with score breakdown and card review.
  * 
  * Pure vanilla JavaScript with zero external libraries.
  */
@@ -44,6 +48,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // { cardId, type, number, tag, prompt, userAnswer, correctAnswer, isCorrect, pointsEarned, maxPoints, explanation, terms, submittedAt }
     answers: {},
 
+    // Tracking incorrectly answered questions for Reverse Round
+    incorrectQuestions: [],
+    reverseRoundCompleted: false,
+    remoteSessionId: null,
+    remoteSessionGeneration: 0,
+    remoteSessionPromise: null,
+    remoteWriteQueue: Promise.resolve(),
+
     // 30-Second Challenge Timer State
     challengeTimerId: null,
     challengeSecondsRemaining: 30
@@ -61,20 +73,36 @@ document.addEventListener("DOMContentLoaded", () => {
     isSubmitted: false
   };
 
+  // State for Reverse Round (Second Chance Phase)
+  const reverseState = {
+    selectedQuestions: [],
+    maxAttempts: 3,
+    attemptsRemaining: 3,
+    currentIndex: 0,
+    pointsEarned: 0,
+    answers: {},
+    selectedOption: null,
+    isSubmitted: false,
+    timerId: null,
+    secondsRemaining: 0
+  };
+
   // ------------------------------------------------------------------------
   // 2. Element References
   // ------------------------------------------------------------------------
-  // Screens (6 Total: Welcome, Setup, Deck, Card Arena, Quiz, Results)
+  // Screens (8 Total: Welcome, Setup, Deck, Card Arena, Quiz, Reverse Intro, Reverse Arena, Results)
   const screens = {
     welcome: document.getElementById("welcome-screen"),
     setup: document.getElementById("setup-screen"),
     deck: document.getElementById("deck-screen"),
     card: document.getElementById("card-screen"),
     quiz: document.getElementById("quiz-screen"),
+    reverseIntro: document.getElementById("reverse-intro-screen"),
+    reverse: document.getElementById("reverse-screen"),
     result: document.getElementById("result-screen")
   };
 
-  // Header & Drawer Elements (Matches Screenshots 1 & 2)
+  // Header & Drawer Elements
   const headerMenuBtn = document.getElementById("header-menu-btn");
   const headerBackBtn = document.getElementById("header-back-btn");
   const sideDrawer = document.getElementById("side-drawer");
@@ -129,6 +157,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const quizFeedbackPoints = document.getElementById("quiz-feedback-points");
   const quizFeedbackCorrectAnswer = document.getElementById("quiz-feedback-correct-answer");
   const quizFeedbackExplanation = document.getElementById("quiz-feedback-explanation");
+  const quizFeedbackKeywordsWrap = document.getElementById("quiz-feedback-keywords-wrap");
+  const quizFeedbackKeywords = document.getElementById("quiz-feedback-keywords");
   const btnQuizNext = document.getElementById("btn-quiz-next");
   const quizNextBtnText = document.getElementById("quiz-next-btn-text");
 
@@ -139,13 +169,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const cardStudentIndicator = document.getElementById("card-student-indicator");
   const cardTypeTabs = document.querySelectorAll(".type-tab");
   const interactiveCard = document.getElementById("interactive-card");
+  const cardBackBrandContent = document.getElementById("card-back-brand-content");
+  const cardBackFlipPill = document.getElementById("card-back-flip-pill");
   const btnFlipCard = document.getElementById("btn-flip-card");
   const btnPrevCard = document.getElementById("btn-prev-card");
   const btnNextCard = document.getElementById("btn-next-card");
 
-  // Front Face Elements
+  // Front Face Elements (UNO Style)
   const frontCardNum = document.getElementById("front-card-num");
   const frontCardNumBottom = document.getElementById("front-card-num-bottom");
+  const frontPipIcon = document.getElementById("front-card-pip-icon");
+  const frontPipIconBottom = document.getElementById("front-card-pip-icon-bottom");
   const frontCardTypeBadge = document.getElementById("front-card-type-badge");
   const frontDeckBadge = document.getElementById("front-deck-badge");
   const frontCardIcon = document.getElementById("front-card-icon");
@@ -158,32 +192,148 @@ document.addEventListener("DOMContentLoaded", () => {
   const frontFlipIcon = document.getElementById("front-flip-icon");
   const frontFlipPillText = document.getElementById("front-flip-pill-text");
 
-  // Back Face Elements
-  const backCardNum = document.getElementById("back-card-num");
-  const backCardNumBottom = document.getElementById("back-card-num-bottom");
+  // Formative Feedback Panel for Cards (keeps uniform card back uncompromised)
+  const cardFeedbackBox = document.getElementById("card-feedback-box");
+  const cardFeedbackHeader = document.getElementById("card-feedback-header");
+  const cardFeedbackIcon = document.getElementById("card-feedback-icon");
+  const cardFeedbackStatus = document.getElementById("card-feedback-status");
+  const cardFeedbackPoints = document.getElementById("card-feedback-points");
+  const cardFeedbackMessage = document.getElementById("card-feedback-message");
+  const backStudentAnswer = document.getElementById("back-student-answer");
   const backAnswerHighlight = document.getElementById("back-answer-highlight");
   const backExplanationText = document.getElementById("back-explanation-text");
+  const backTriviaWrap = document.getElementById("back-trivia-wrap");
   const backTriviaText = document.getElementById("back-trivia-text");
+  const backTermsBox = document.getElementById("back-terms-box");
+  const backTermsText = document.getElementById("back-terms-text");
 
-  // Screen 5: Results Elements
+  // Screen 3.7: Reverse Round Intro Elements
+  const btnStartReverseRound = document.getElementById("btn-start-reverse-round");
+  const btnSkipReverseRound = document.getElementById("btn-skip-reverse-round");
+  const reverseEligibleCount = document.getElementById("reverse-eligible-count");
+  const reverseAttemptLimitLabel = document.getElementById("reverse-attempt-limit-label");
+
+  // Screen 3.8: Reverse Round Arena Elements (Special Red Reverse Card)
+  const btnReverseBackDecks = document.getElementById("btn-reverse-back-decks");
+  const reverseAttemptText = document.getElementById("reverse-attempt-text");
+  const reverseAttemptDots = document.getElementById("reverse-attempt-dots");
+  const reverseScoreText = document.getElementById("reverse-score-text");
+  const reverseCard = document.getElementById("reverse-card");
+  const reverseCardBackBrandContent = document.getElementById("reverse-card-back-brand-content");
+  const reverseCardNum = document.getElementById("reverse-card-num");
+  const reverseCardCategoryBadge = document.getElementById("reverse-card-category-badge");
+  const reverseCardTitle = document.getElementById("reverse-card-title");
+  const reverseCardPrompt = document.getElementById("reverse-card-prompt");
+  const reverseCardOptions = document.getElementById("reverse-card-options");
+  const reverseFlipPill = document.getElementById("reverse-flip-pill");
+  const btnReverseFlipCard = document.getElementById("btn-reverse-flip-card");
+  const btnReverseSubmit = document.getElementById("btn-reverse-submit");
+  const reverseSubmitWrap = document.getElementById("reverse-submit-wrap");
+  const reverseAlertBox = document.getElementById("reverse-alert-box");
+  const reverseAlertText = document.getElementById("reverse-alert-text");
+  const reverseFeedbackBox = document.getElementById("reverse-feedback-box");
+  const reverseFeedbackHeader = document.getElementById("reverse-feedback-header");
+  const reverseFeedbackIcon = document.getElementById("reverse-feedback-icon");
+  const reverseFeedbackStatus = document.getElementById("reverse-feedback-status");
+  const reverseFeedbackPoints = document.getElementById("reverse-feedback-points");
+  const reverseFeedbackMessage = document.getElementById("reverse-feedback-message");
+  const reverseFeedbackStudentAnswer = document.getElementById("reverse-feedback-student-answer");
+  const reverseFeedbackAnswer = document.getElementById("reverse-feedback-answer");
+  const reverseFeedbackExplanation = document.getElementById("reverse-feedback-explanation");
+  const reverseFeedbackTerms = document.getElementById("reverse-feedback-terms");
+  const reverseFeedbackTermsText = document.getElementById("reverse-feedback-terms-text");
+  const btnReverseNext = document.getElementById("btn-reverse-next");
+  const reverseNextBtnText = document.getElementById("reverse-next-btn-text");
+  const reverseTimerBadge = document.getElementById("reverse-timer-badge");
+  const reverseTimerSeconds = document.getElementById("reverse-timer-seconds");
+  const reverseHeaderTimerBadge = document.getElementById("reverse-header-timer-badge");
+  const reverseHeaderTimerSeconds = document.getElementById("reverse-header-timer-seconds");
+
+  // Screen 4: Results Elements
   const resultStudentGreeting = document.getElementById("result-student-greeting");
   const resultScoreNum = document.getElementById("result-score-num");
   const resultScoreMax = document.getElementById("result-score-max");
   const resultPercentageBadge = document.getElementById("result-percentage-badge");
   const resultDeckBadge = document.getElementById("result-deck-badge");
+  const resultCorrectCount = document.getElementById("result-correct-count");
+  const resultIncorrectCount = document.getElementById("result-incorrect-count");
+  const resultStatReversePill = document.getElementById("result-stat-reverse-pill");
+  const resultReverseCount = document.getElementById("result-reverse-count");
+  const resultMainRoundPts = document.getElementById("result-main-round-pts");
+  const resultReversePts = document.getElementById("result-reverse-pts");
+  const resultFinalTotalPts = document.getElementById("result-final-total-pts");
   const resultPerformanceTitle = document.getElementById("result-performance-title");
   const resultPerformanceMsg = document.getElementById("result-performance-msg");
+  const resultReviewHeading = document.getElementById("result-review-heading");
+  const resultReviewSub = document.getElementById("result-review-sub");
   const resultBreakdownList = document.getElementById("result-breakdown-list");
   const btnRetryDeck = document.getElementById("btn-retry-deck");
   const btnResultToDecks = document.getElementById("btn-result-to-decks");
   const btnResultToHome = document.getElementById("btn-result-to-home");
-  const resultCorrectCount = document.getElementById("result-correct-count");
-  const resultIncorrectCount = document.getElementById("result-incorrect-count");
-  const resultReviewHeading = document.getElementById("result-review-heading");
-  const resultReviewSub = document.getElementById("result-review-sub");
 
   // Active visible screen reference
   let currentScreen = screens.welcome;
+
+  // Optional backend persistence is active only when an authenticated token and API URL exist.
+  // The standalone classroom flow remains fully playable without either configuration.
+  function beginRemoteGameSession(topicCode, mode) {
+    appState.remoteSessionId = null;
+    appState.remoteQuestionCatalog = null;
+    appState.remoteSessionPromise = null;
+    appState.remoteWriteQueue = Promise.resolve();
+    const api = window.PANITIKARD_GAME_API;
+    if (!api || !api.enabled || !api.hasAccessToken()) return;
+    const generation = ++appState.remoteSessionGeneration;
+    appState.remoteSessionPromise = Promise.all([
+      api.listQuestions(topicCode, mode === "quiz" ? "quiz" : "cards"),
+      api.createSession(topicCode, mode, appState.studentName)
+    ]).then(([catalog, session]) => {
+      if (generation !== appState.remoteSessionGeneration) return;
+      appState.remoteQuestionCatalog = catalog;
+      appState.remoteSessionId = session && session.id;
+      return { session, catalog };
+    }).catch((error) => {
+      if (generation === appState.remoteSessionGeneration) {
+        console.warn("PanitiKard backend unavailable; continuing with local gameplay.", error.message);
+      }
+    });
+  }
+
+  function persistRemoteAnswer(questionCode, response, round = "main", options = {}) {
+    const api = window.PANITIKARD_GAME_API;
+    const sessionPromise = appState.remoteSessionPromise;
+    if (!api || !sessionPromise) return;
+    appState.remoteWriteQueue = appState.remoteWriteQueue
+      .then(() => sessionPromise)
+      .then(remote => {
+        if (!remote?.session?.id) return null;
+        const foundInPublishedCatalog = (remote.catalog?.questions || []).some(question =>
+          question.code === questionCode || question.id === questionCode
+        );
+        if (!foundInPublishedCatalog) {
+          console.warn(`Question ${questionCode} is absent from the published backend catalog; answer was not persisted.`);
+          return null;
+        }
+        return api.submitAnswer(remote.session.id, questionCode, response, round, options);
+      })
+      .catch((error) => {
+      console.warn("Unable to persist this answer to the backend.", error.message);
+    });
+  }
+
+  function finishRemoteGameSession() {
+    const api = window.PANITIKARD_GAME_API;
+    const sessionPromise = appState.remoteSessionPromise;
+    if (!api || !sessionPromise) return;
+    appState.remoteSessionId = null;
+    appState.remoteSessionPromise = null;
+    appState.remoteWriteQueue = appState.remoteWriteQueue
+      .then(() => sessionPromise)
+      .then(remote => remote?.session?.id ? api.finishSession(remote.session.id) : null)
+      .catch((error) => {
+      console.warn("Unable to mark the backend session complete.", error.message);
+    });
+  }
 
   // ------------------------------------------------------------------------
   // 3. Screen Navigation Helper
@@ -194,6 +344,12 @@ document.addEventListener("DOMContentLoaded", () => {
    * @param {HTMLElement} targetScreen
    */
   function navigateToScreen(targetScreen) {
+    if (currentScreen === screens.card && targetScreen !== screens.card) {
+      stopChallengeTimer();
+    }
+    if (currentScreen === screens.reverse && targetScreen !== screens.reverse) {
+      stopReverseTimer();
+    }
     Object.values(screens).forEach((screen) => {
       if (screen) screen.classList.add("hidden");
     });
@@ -224,6 +380,11 @@ document.addEventListener("DOMContentLoaded", () => {
         stopChallengeTimer();
         navigateToScreen(screens.deck);
       } else if (currentScreen === screens.quiz) {
+        navigateToScreen(screens.deck);
+      } else if (currentScreen === screens.reverseIntro) {
+        navigateToScreen(screens.deck);
+      } else if (currentScreen === screens.reverse) {
+        stopReverseTimer();
         navigateToScreen(screens.deck);
       } else if (currentScreen === screens.result) {
         navigateToScreen(screens.deck);
@@ -371,7 +532,7 @@ document.addEventListener("DOMContentLoaded", () => {
     btnBackToSetup.addEventListener("click", () => {
       stopChallengeTimer();
       navigateToScreen(screens.setup);
-      studentNameInput.focus();
+      if (studentNameInput) studentNameInput.focus();
     });
   }
 
@@ -379,12 +540,12 @@ document.addEventListener("DOMContentLoaded", () => {
     btnEditStudentName.addEventListener("click", () => {
       stopChallengeTimer();
       navigateToScreen(screens.setup);
-      studentNameInput.focus();
+      if (studentNameInput) studentNameInput.focus();
     });
   }
 
   // ------------------------------------------------------------------------
-  // 6. Screen 2: Topic Selection Handling (Screenshot 3 & Quiz Flow)
+  // 7. Topic Selection Handling (Alamat, Kwento, Elements, Meaning)
   // ------------------------------------------------------------------------
   function selectDeck(deckId) {
     appState.activeDeckId = deckId;
@@ -404,9 +565,23 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function setActiveCardFace(card, showingBack) {
+    if (!card) return;
+    const front = card.querySelector(".card-front");
+    const back = card.querySelector(".card-back");
+    if (front) {
+      front.setAttribute("aria-hidden", String(showingBack));
+      front.inert = showingBack;
+    }
+    if (back) {
+      back.setAttribute("aria-hidden", String(!showingBack));
+      back.inert = !showingBack;
+    }
+  }
+
   function handleTopicSelection(deckId) {
     if (deckId === "alamat" || deckId === "maikling-kwento") {
-      // Immediately start the quiz without another category selection page
+      // Immediately start the 15-question quiz
       startQuiz(deckId);
     } else {
       // 7-card 3D flip card flow (elements, meaning)
@@ -426,7 +601,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Deck Screen -> Card Arena Screen (Fallback button)
   if (btnEnterDeck) {
     btnEnterDeck.addEventListener("click", () => {
       handleTopicSelection(appState.activeDeckId);
@@ -434,18 +608,34 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ------------------------------------------------------------------------
-  // 7. Gameplay Session Start & Card Arena Lifecycle
+  // 8. Gameplay Session Start & Card Arena Lifecycle
   // ------------------------------------------------------------------------
   function startDeckSession() {
     // Reset gameplay state for new session
     appState.lastPlayedMode = "deck";
     appState.answers = {};
+    appState.incorrectQuestions = [];
+    appState.reverseRoundCompleted = false;
     appState.activeCardTypeIndex = 0;
     appState.highestUnlockedIndex = 0;
     stopChallengeTimer();
 
+    // Reset reverse state
+    stopReverseTimer();
+    reverseState.selectedQuestions = [];
+    reverseState.maxAttempts = 3;
+    reverseState.attemptsRemaining = 3;
+    reverseState.currentIndex = 0;
+    reverseState.pointsEarned = 0;
+    reverseState.answers = {};
+    reverseState.selectedOption = null;
+    reverseState.isSubmitted = false;
+    reverseState.timerId = null;
+    reverseState.secondsRemaining = 0;
+
     const deck = PANITIKARD_DECKS[appState.activeDeckId];
     if (!deck) return;
+    beginRemoteGameSession(appState.activeDeckId, "deck");
 
     if (cardDeckIndicator) {
       cardDeckIndicator.textContent = `Deck: ${deck.title}`;
@@ -460,14 +650,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /**
    * Renders the card at the specified index within the active deck.
-   * Handles flip security, submission checking, and timer initiation.
+   * Applies UNO category styling, corner pips, and manages formative feedback.
    * @param {number} index
    */
   function renderCardByTypeIndex(index) {
     const deck = PANITIKARD_DECKS[appState.activeDeckId];
     if (!deck || !deck.cards[index]) return;
 
-    // Stop any existing timer when switching cards
     stopChallengeTimer();
 
     appState.activeCardTypeIndex = index;
@@ -476,47 +665,67 @@ document.addEventListener("DOMContentLoaded", () => {
       label: cardData.type,
       subLabel: "Card",
       icon: "🎴",
-      color: "#185b55"
+      color: "#185b55",
+      tagClass: "type-question",
+      themeClass: "card-theme-green"
     };
 
     const isSubmitted = !!appState.answers[cardData.id];
     const currentSubmission = appState.answers[cardData.id] || null;
+    const colorSequence = ["yellow", "red", "blue", "green"];
+    const sequenceColor = colorSequence[index % colorSequence.length];
 
-    // Apply card type styling classes
-    interactiveCard.className = "playing-card";
-    interactiveCard.classList.add(`theme-${typeMeta.tagClass}`);
-    
-    // Card flip status: locked on front face if not submitted yet
-    if (!isSubmitted) {
-      interactiveCard.classList.remove("is-flipped");
-      interactiveCard.dataset.flipped = "false";
+    // Keep card colors in the approved repeating order, independent of question type.
+    interactiveCard.className = `playing-card theme-${typeMeta.tagClass} ${typeMeta.themeClass || ""} card-sequence-${sequenceColor}`;
+
+    // A new question always begins on the branded green back; answered cards reopen on evaluation.
+    interactiveCard.classList.toggle("is-flipped", true);
+    interactiveCard.dataset.flipped = "true";
+    setActiveCardFace(interactiveCard, true);
+    if (cardBackBrandContent) cardBackBrandContent.classList.toggle("hidden", isSubmitted);
+    if (cardBackFlipPill) cardBackFlipPill.classList.toggle("hidden", isSubmitted);
+
+    // 0. Update Single Active Category Header (Displays ONLY the active card's category; inactive remain hidden)
+    const singleActiveCategoryBanner = document.getElementById("single-active-category-banner");
+    const activeCatIcon = document.getElementById("active-cat-icon");
+    const activeCatName = document.getElementById("active-cat-name");
+    const activeCatDesc = document.getElementById("active-cat-desc");
+    const activeCatStep = document.getElementById("active-cat-step");
+
+    if (singleActiveCategoryBanner) singleActiveCategoryBanner.className = "single-category-header-banner theme-green";
+    if (activeCatIcon) activeCatIcon.textContent = typeMeta.icon;
+    if (activeCatName) activeCatName.textContent = typeMeta.label;
+    if (activeCatDesc) activeCatDesc.textContent = typeMeta.unoCategory || typeMeta.subLabel;
+    if (activeCatStep) activeCatStep.textContent = `Kard ${index + 1} ng ${deck.cards.length}`;
+
+    // 1. Header Badges & UNO Corner Pips
+    if (frontCardNum) frontCardNum.textContent = cardData.number;
+    if (frontCardNumBottom) frontCardNumBottom.textContent = cardData.number;
+    if (frontPipIcon) frontPipIcon.textContent = typeMeta.icon;
+    if (frontPipIconBottom) frontPipIconBottom.textContent = typeMeta.icon;
+
+    if (frontCardTypeBadge) {
+      frontCardTypeBadge.innerHTML = `
+        <span class="type-badge-icon">${typeMeta.icon}</span>
+        <span class="type-badge-text">${typeMeta.label} &bull; ${typeMeta.subLabel}</span>
+      `;
     }
 
-    // 1. Header Badges & Corners
-    frontCardNum.textContent = cardData.number;
-    frontCardNumBottom.textContent = cardData.number;
-    backCardNum.textContent = cardData.number;
-    backCardNumBottom.textContent = cardData.number;
-
-    frontCardTypeBadge.innerHTML = `
-      <span class="type-badge-icon">${typeMeta.icon}</span>
-      <span class="type-badge-text">${typeMeta.label} &bull; ${typeMeta.subLabel}</span>
-    `;
-
-    frontDeckBadge.textContent = deck.badge;
-    frontCardIcon.textContent = typeMeta.icon;
+    if (frontDeckBadge) frontDeckBadge.textContent = deck.badge;
+    if (frontCardIcon) frontCardIcon.textContent = typeMeta.icon;
 
     // 2. Title & Prompt Text
-    frontCardTitle.textContent = cardData.title;
-    frontCardPrompt.textContent = cardData.prompt;
+    if (frontCardTitle) frontCardTitle.textContent = cardData.title;
+    if (frontCardPrompt) frontCardPrompt.textContent = cardData.prompt;
 
     // 3. Challenge Timer Header Indicator
     if (cardData.timeLimit && frontTimerBadge) {
       frontTimerBadge.classList.remove("hidden");
       if (!isSubmitted) {
-        startChallengeTimer(cardData);
+        appState.challengeSecondsRemaining = cardData.timeLimit;
+        if (timerSeconds) timerSeconds.textContent = String(appState.challengeSecondsRemaining);
       } else {
-        timerSeconds.textContent = "0";
+        if (timerSeconds) timerSeconds.textContent = "0";
       }
     } else if (frontTimerBadge) {
       frontTimerBadge.classList.add("hidden");
@@ -525,7 +734,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // 4. Options or Open Response Input Presentation
     renderCardFrontOptions(cardData, isSubmitted, currentSubmission, typeMeta);
 
-    // 5. Back Face Content (Answers, Explanations, Keywords)
+    // 5. Back Content & Formative Feedback Box
     renderCardBackContent(cardData, isSubmitted, currentSubmission);
 
     // 6. Flip Security & On-Card Pill Indicator
@@ -539,24 +748,21 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /**
-   * Updates flip security indicators on the card front and toolbar.
-   * Prevents revealing answers prior to submission.
+   * Updates reveal instructions and the card's flip control.
    */
   function updateFlipControlsState(isSubmitted) {
-    if (!isSubmitted) {
-      if (frontFlipIcon) frontFlipIcon.textContent = "🔒";
-      if (frontFlipPillText) frontFlipPillText.textContent = "Mag-submit muna ng sagot upang buksan";
-      if (btnFlipCard) {
-        btnFlipCard.disabled = true;
-        btnFlipCard.title = "Kailangan munang sagutan ang kard bago buksan ang likod.";
-      }
-    } else {
-      if (frontFlipIcon) frontFlipIcon.textContent = "🔄";
-      if (frontFlipPillText) frontFlipPillText.textContent = "I-tap upang Baligtarin at Suriin";
-      if (btnFlipCard) {
-        btnFlipCard.disabled = false;
-        btnFlipCard.title = "I-flip ang kard upang basahin ang paliwanag.";
-      }
+    const showingBack = interactiveCard.classList.contains("is-flipped");
+    if (frontFlipIcon) frontFlipIcon.textContent = showingBack ? "🔄" : "✍️";
+    if (frontFlipPillText) {
+      frontFlipPillText.textContent = showingBack
+        ? "I-tap upang ipakita ang tanong"
+        : (isSubmitted ? "Nasuri na ang sagot" : "Sagutan at isumite ang tanong");
+    }
+    if (btnFlipCard) {
+      btnFlipCard.disabled = isSubmitted;
+      btnFlipCard.title = isSubmitted
+        ? "Nasa evaluation face na ang kard. Magpatuloy sa susunod na tanong."
+        : (showingBack ? "Ipakita ang tanong sa harap ng kard." : "Ibaligtad ang iisang kard.");
     }
   }
 
@@ -564,12 +770,10 @@ document.addEventListener("DOMContentLoaded", () => {
    * Updates toolbar button states based on progression.
    */
   function updateNavigationControls(index, isSubmitted) {
-    // Previous Button
     if (btnPrevCard) {
       btnPrevCard.disabled = (index === 0);
     }
 
-    // Next Button: Locked until submission
     if (btnNextCard) {
       if (!isSubmitted) {
         btnNextCard.disabled = true;
@@ -577,8 +781,12 @@ document.addEventListener("DOMContentLoaded", () => {
       } else {
         btnNextCard.disabled = false;
         if (index === 6) {
-          // Last card submitted -> Show Results button
-          btnNextCard.innerHTML = `<span>Tingnan ang Resulta 🏆 &rarr;</span>`;
+          // Check if reverse round is available
+          if (!appState.reverseRoundCompleted && appState.incorrectQuestions.length > 0) {
+            btnNextCard.innerHTML = `<span>Reverse Round 🔁 &rarr;</span>`;
+          } else {
+            btnNextCard.innerHTML = `<span>Tingnan ang Resulta 🏆 &rarr;</span>`;
+          }
         } else {
           btnNextCard.innerHTML = `<span>Susunod &rarr;</span>`;
         }
@@ -591,7 +799,6 @@ document.addEventListener("DOMContentLoaded", () => {
    */
   function updateTabsState(activeIndex) {
     cardTypeTabs.forEach((tab, i) => {
-      // Locked state: cannot jump ahead to unreached cards
       const isLocked = i > appState.highestUnlockedIndex;
       
       if (isLocked) {
@@ -616,16 +823,16 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ------------------------------------------------------------------------
-  // 8. Card Front Presentation & Submission Handlers
+  // 9. Card Front Presentation & Submission Handlers
   // ------------------------------------------------------------------------
   function renderCardFrontOptions(cardData, isSubmitted, submission, typeMeta) {
+    if (!frontCardOptions) return;
     frontCardOptions.innerHTML = "";
 
-    // A. Multiple Choice Card (Card Type 1: Question)
+    // A. Multiple Choice Card
     if (cardData.options && cardData.options.length > 0) {
       frontCardOptions.className = "card-options-grid";
       let selectedOptionKey = submission ? submission.userAnswer : null;
-
       const choiceElements = [];
 
       cardData.options.forEach((opt) => {
@@ -639,20 +846,10 @@ document.addEventListener("DOMContentLoaded", () => {
           <span class="option-status-icon"></span>
         `;
 
-        // If already submitted: show correct/incorrect styles
         if (isSubmitted) {
           optionEl.classList.add("disabled");
-          const statusIcon = optionEl.querySelector(".option-status-icon");
-
-          if (opt.key === cardData.answer) {
-            optionEl.classList.add("correct");
-            statusIcon.textContent = "✓";
-          } else if (opt.key === submission.userAnswer && !submission.isCorrect) {
-            optionEl.classList.add("incorrect");
-            statusIcon.textContent = "✗";
-          }
+          if (opt.key === submission.userAnswer) optionEl.classList.add("selected");
         } else {
-          // Active interactive choice selection
           optionEl.addEventListener("click", (e) => {
             e.stopPropagation();
             choiceElements.forEach(el => el.classList.remove("selected"));
@@ -679,27 +876,16 @@ document.addEventListener("DOMContentLoaded", () => {
           </button>
         `;
         const submitBtn = submitRow.querySelector(".btn-submit-choice");
-        submitBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          if (selectedOptionKey) {
-            submitMultipleChoiceAnswer(selectedOptionKey, cardData);
-          }
-        });
-      } else {
-        // Feedback display after submission
-        if (submission.isCorrect) {
-          submitRow.innerHTML = `
-            <span class="feedback-badge feedback-correct">
-              <span>✅ TAMA! Natamo mo ang ${submission.pointsEarned} puntos.</span>
-            </span>
-          `;
-        } else {
-          submitRow.innerHTML = `
-            <span class="feedback-badge feedback-incorrect">
-              <span>❌ MALI. Ang tamang sagot ay (${cardData.answer}).</span>
-            </span>
-          `;
+        if (submitBtn) {
+          submitBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (selectedOptionKey) {
+              submitMultipleChoiceAnswer(selectedOptionKey, cardData);
+            }
+          });
         }
+      } else {
+        submitRow.innerHTML = `<span class="feedback-badge feedback-submitted"><span>Nasumite na. I-flip ang kard para makita ang pagsusuri.</span></span>`;
       }
 
       frontCardOptions.appendChild(submitRow);
@@ -711,7 +897,6 @@ document.addEventListener("DOMContentLoaded", () => {
       const openCardForm = document.createElement("div");
       openCardForm.className = "open-card-form";
 
-      // Meta indicators: time limits, hints, points rule
       let badgesHtml = `<span class="format-tag">✍️ Anyong Pasulat</span>`;
       if (cardData.timeLimit) {
         badgesHtml += `<span class="time-limit-badge">⏱️ ${cardData.timeLimit}s</span>`;
@@ -743,7 +928,7 @@ document.addEventListener("DOMContentLoaded", () => {
         </div>
         <textarea id="open-answer-input" class="open-card-textarea"
           placeholder="Isulat dito ang iyong sagot o paliwanag..."
-          rows="2" maxlength="280" ${isSubmitted ? "disabled" : ""}>${isSubmitted ? (submission.userAnswer || "") : ""}</textarea>
+          rows="2" maxlength="280" ${isSubmitted ? "disabled" : ""}>${isSubmitted ? escapeHtml(submission.userAnswer || "") : ""}</textarea>
         <div class="card-submit-row">
           ${!isSubmitted ? `
             <button type="button" id="btn-submit-open" class="btn-submit-choice">
@@ -775,25 +960,27 @@ document.addEventListener("DOMContentLoaded", () => {
         const btnSubmitOpen = openCardForm.querySelector("#btn-submit-open");
         const textarea = openCardForm.querySelector("#open-answer-input");
 
-        btnSubmitOpen.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const answerText = textarea.value.trim();
-          if (!answerText) {
-            textarea.focus();
-            textarea.style.borderColor = "#dc2626";
-            setTimeout(() => { textarea.style.borderColor = ""; }, 1800);
-            return;
-          }
-          submitOpenEndedAnswer(answerText, cardData);
-        });
+        if (btnSubmitOpen && textarea) {
+          btnSubmitOpen.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const answerText = textarea.value.trim();
+            if (!answerText) {
+              textarea.focus();
+              textarea.style.borderColor = "#dc2626";
+              setTimeout(() => { textarea.style.borderColor = ""; }, 1800);
+              return;
+            }
+            submitOpenEndedAnswer(answerText, cardData);
+          });
 
-        // Submit on Ctrl+Enter
-        textarea.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            btnSubmitOpen.click();
-          }
-        });
+          textarea.addEventListener("click", (e) => e.stopPropagation());
+          textarea.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+              e.preventDefault();
+              btnSubmitOpen.click();
+            }
+          });
+        }
       }
 
       frontCardOptions.appendChild(openCardForm);
@@ -802,58 +989,89 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function getOpenFeedbackText(submission, cardData) {
     if (submission.isTimeout) {
-      return `⏱️ Naubos ang 30 segundo na palugit!`;
+      return "⏱️ Naubos ang 30 segundo na palugit!";
     }
-    if (cardData.type === "bonus") {
-      return `⭐ Naitala ang sagot sa Bonus Kard! (+${submission.pointsEarned} puntos)`;
-    }
-    if (cardData.type === "reverse") {
-      return `🔄 Naitala ang pagbabalik-aral. (0 puntos)`;
-    }
-    return `✅ Naitala ang iyong tugon para sa pagsusuri. (+${submission.pointsEarned} puntos)`;
+    return "Nasumite na. I-flip ang kard para makita ang pagsusuri.";
   }
 
   // ------------------------------------------------------------------------
-  // 9. Card Back Presentation (Answers, Explanations & Keywords)
+  // 10. Card Back Presentation & Formative Feedback Box
   // ------------------------------------------------------------------------
   function renderCardBackContent(cardData, isSubmitted, submission) {
-    // Back answer highlight
-    if (cardData.options && cardData.options.length > 0) {
-      const correctOpt = cardData.options.find(o => o.key === cardData.answer);
-      backAnswerHighlight.innerHTML = correctOpt 
-        ? `${cardData.answer} &bull; ${correctOpt.text}` 
-        : cardData.answer;
-    } else {
-      backAnswerHighlight.textContent = cardData.answer;
+    // Populate the evaluation shown on the same card's reverse face.
+    if (backAnswerHighlight) {
+      if (cardData.options && cardData.options.length > 0) {
+        const correctOpt = cardData.options.find(o => o.key === cardData.answer);
+        backAnswerHighlight.textContent = correctOpt
+          ? `${cardData.answer} · ${correctOpt.text}`
+          : cardData.answer;
+      } else {
+        backAnswerHighlight.textContent = cardData.answer || "—";
+      }
     }
 
-    backExplanationText.textContent = cardData.explanation;
+    if (backStudentAnswer) backStudentAnswer.textContent = submission ? submission.userAnswer : "—";
 
-    // Display Trivia (if exists) or V1 Accepted Keywords (terms)
-    const backTriviaBox = document.querySelector(".back-trivia-box");
-    const triviaTitle = document.querySelector(".trivia-title");
-    
+    if (backExplanationText) {
+      backExplanationText.textContent = cardData.explanation;
+    }
+
     if (cardData.didYouKnow) {
-      if (backTriviaBox) backTriviaBox.style.display = "block";
-      if (triviaTitle) triviaTitle.textContent = "✨ Alam Mo Ba?";
-      backTriviaText.textContent = cardData.didYouKnow;
-    } else if (cardData.terms && cardData.terms.length > 0) {
-      if (backTriviaBox) backTriviaBox.style.display = "block";
-      if (triviaTitle) triviaTitle.textContent = "🔑 Mga Susing Kaisipan (V1 Keywords):";
-      backTriviaText.textContent = cardData.terms.map(group => group.join(" / ")).join(" • ");
+      if (backTriviaWrap) backTriviaWrap.classList.remove("hidden");
+      if (backTriviaText) backTriviaText.textContent = cardData.didYouKnow;
     } else {
-      if (backTriviaBox) backTriviaBox.style.display = "none";
+      if (backTriviaWrap) backTriviaWrap.classList.add("hidden");
+    }
+
+    if (cardData.terms && cardData.terms.length > 0) {
+      if (backTermsBox) backTermsBox.classList.remove("hidden");
+      if (backTermsText) backTermsText.textContent = cardData.terms.map(g => g.join(" / ")).join(" • ");
+    } else {
+      if (backTermsBox) backTermsBox.classList.add("hidden");
+    }
+
+    // Swap branded back for feedback only after a response has been evaluated.
+    if (cardBackBrandContent) cardBackBrandContent.classList.toggle("hidden", !!(isSubmitted && submission));
+    if (cardBackFlipPill) cardBackFlipPill.classList.toggle("hidden", !!(isSubmitted && submission));
+    if (cardFeedbackBox) {
+      if (isSubmitted && submission) {
+        cardFeedbackBox.classList.remove("hidden");
+        const isOk = submission.isCorrect;
+        if (cardFeedbackHeader) {
+          cardFeedbackHeader.className = `card-feedback-head ${isOk ? "feedback-correct" : "feedback-incorrect"}`;
+        }
+        if (cardFeedbackIcon) {
+          cardFeedbackIcon.textContent = isOk ? "✓" : "✗";
+        }
+        if (cardFeedbackStatus) {
+          cardFeedbackStatus.textContent = isOk ? "TAMA!" : (submission.isTimeout ? "NAUBOS ANG ORAS!" : "HINDI TUMUGMA");
+        }
+        if (cardFeedbackPoints) {
+          cardFeedbackPoints.textContent = `+${submission.pointsEarned} ${submission.pointsEarned === 1 ? "Punto" : "Puntos"}`;
+        }
+        if (cardFeedbackMessage) {
+          cardFeedbackMessage.textContent = submission.isTimeout
+            ? "Naubos ang oras. Walang puntos na iginawad."
+            : (isOk
+              ? "Tugma ang sagot sa inaasahang sagot at pamantayan."
+              : "Hindi naabot ng sagot ang mga pamantayang itinakda para sa tanong na ito.");
+        }
+      } else {
+        cardFeedbackBox.classList.add("hidden");
+      }
     }
   }
 
   // ------------------------------------------------------------------------
-  // 10. Evaluation & Submission Logic
+  // 11. Evaluation & Submission Logic
   // ------------------------------------------------------------------------
   /**
    * Submits and grades Multiple Choice answers (1 point).
+   * Automatically records incorrect questions for Reverse Round.
    */
   function submitMultipleChoiceAnswer(selectedKey, cardData) {
-    if (appState.answers[cardData.id]) return; // Prevent duplicate submission
+    if (appState.answers[cardData.id]) return;
+    if (interactiveCard.classList.contains("is-flipped")) return;
 
     const isCorrect = (selectedKey === cardData.answer);
     const pointsEarned = isCorrect ? cardData.points : 0;
@@ -874,56 +1092,68 @@ document.addEventListener("DOMContentLoaded", () => {
       terms: cardData.terms,
       submittedAt: new Date().toISOString()
     };
+    persistRemoteAnswer(cardData.id, selectedKey, "main");
 
-    // Unlock next sequential card index
+    // Record incorrect question for Reverse Round
+    if (!isCorrect) {
+      const exists = appState.incorrectQuestions.some(item => item.id === cardData.id);
+      if (!exists) {
+        appState.incorrectQuestions.push({
+          id: cardData.id,
+          source: "card",
+          title: cardData.title,
+          question: cardData.prompt,
+          category: cardData.tag || "Pagsusuri",
+          questionType: "multiple_choice",
+          choices: cardData.options ? [...cardData.options] : [],
+          answer: cardData.answer,
+          explanation: cardData.explanation,
+          terms: cardData.terms,
+          points: cardData.points || 1,
+          timeLimit: cardData.timeLimit || null,
+          originalCard: cardData
+        });
+      }
+    }
+
     unlockNextIndex();
-
-    // Re-render card in submitted state
     renderCardByTypeIndex(appState.activeCardTypeIndex);
-
-    // Smooth auto-flip to reveal literary explanation
-    autoFlipToBack();
   }
 
   /**
    * Evaluates Open-Ended responses (Statement, Correction, Bonus, etc.).
-   * 
-   * ARCHITECTURE NOTICE:
-   * Prepared for future Gemini AI evaluation API integration.
-   * Does NOT use simple keyword matching as a rigid pass/fail final gate.
-   * Validates substantive engagement and preserves curriculum scoring rules:
-   * Bonus = 2 pts, Reverse = 0 pts (unscored), others = 1 pt.
    */
   function evaluateOpenEndedAnswer(userAnswer, cardData) {
-    const trimmed = (userAnswer || "").trim();
-    const isSubstantive = trimmed.length >= 3;
-
-    // Conceptual keyword check preserved as an advisory metric for review display
-    let advisoryKeywordMatch = false;
-    if (cardData.terms && cardData.terms.length > 0) {
-      const lower = trimmed.toLowerCase();
-      advisoryKeywordMatch = cardData.terms.some(group =>
-        group.some(term => lower.includes(term.toLowerCase()))
-      );
-    }
-
-    // Award full points for substantive attempt;
-    // Curriculum rules: Reverse = 0 pts, Bonus = 2 pts, others = 1 pt.
-    const points = isSubstantive ? cardData.points : 0;
+    const evaluation = PANITIKARD_ANSWER_EVALUATOR.evaluateWrittenAnswer({
+      studentAnswer: userAnswer,
+      expectedAnswer: cardData.answer,
+      acceptedAnswers: cardData.acceptedAnswers || [],
+      rubricGroups: cardData.terms || [],
+      questionId: cardData.id
+    });
 
     return {
-      isCorrect: isSubstantive,
-      pointsEarned: points,
-      advisoryKeywordMatch: advisoryKeywordMatch,
-      evaluationMethod: "provisional_ai_ready"
+      isCorrect: evaluation.isCorrect,
+      pointsEarned: evaluation.isCorrect ? (cardData.points ?? 1) : 0,
+      matchedGroups: evaluation.matchedGroups,
+      requiredGroups: evaluation.requiredGroups,
+      evaluationMethod: evaluation.method,
+      evaluationContext: {
+        question: cardData.prompt,
+        expectedAnswer: cardData.answer,
+        rubricGroups: cardData.terms || [],
+        studentAnswer: userAnswer
+      }
     };
   }
 
   /**
    * Submits an open-ended answer.
+   * Records incorrect answers (e.g. timeouts or blank responses) for Reverse Round.
    */
   function submitOpenEndedAnswer(answerText, cardData, isTimeout = false) {
-    if (appState.answers[cardData.id]) return; // Prevent duplicate submission
+    if (appState.answers[cardData.id]) return;
+    if (interactiveCard.classList.contains("is-flipped")) return;
 
     stopChallengeTimer();
 
@@ -947,18 +1177,37 @@ document.addEventListener("DOMContentLoaded", () => {
       maxPoints: cardData.points,
       explanation: cardData.explanation,
       terms: cardData.terms,
+      evaluationMethod: evalResult.evaluationMethod,
+      evaluationContext: evalResult.evaluationContext,
       isTimeout: isTimeout,
       submittedAt: new Date().toISOString()
     };
+    persistRemoteAnswer(cardData.id, answerText, "main", { isTimeout });
 
-    // Unlock next sequential card index
+    // Record incorrect question for Reverse Round
+    if (!evalResult.isCorrect) {
+      const exists = appState.incorrectQuestions.some(item => item.id === cardData.id);
+      if (!exists) {
+        appState.incorrectQuestions.push({
+          id: cardData.id,
+          source: "card",
+          title: cardData.title,
+          question: cardData.prompt,
+          category: cardData.tag || "Pagsusuri",
+          questionType: "open_ended",
+          choices: null,
+          answer: cardData.answer,
+          explanation: cardData.explanation,
+          terms: cardData.terms,
+          points: cardData.points || 1,
+          timeLimit: cardData.timeLimit || null,
+          originalCard: cardData
+        });
+      }
+    }
+
     unlockNextIndex();
-
-    // Re-render card in submitted state
     renderCardByTypeIndex(appState.activeCardTypeIndex);
-
-    // Smooth auto-flip to reveal literary explanation
-    autoFlipToBack();
   }
 
   function unlockNextIndex() {
@@ -967,22 +1216,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function autoFlipToBack() {
-    setTimeout(() => {
-      if (interactiveCard && !interactiveCard.classList.contains("is-flipped")) {
-        interactiveCard.classList.add("is-flipped");
-        interactiveCard.dataset.flipped = "true";
-      }
-    }, 600);
-  }
-
   // ------------------------------------------------------------------------
-  // 11. Challenge Card 30-Second Countdown Timer
+  // 12. Challenge Card 30-Second Countdown Timer
   // ------------------------------------------------------------------------
-  function startChallengeTimer(cardData) {
+  function startChallengeTimer(cardData, preserveRemaining = false) {
     stopChallengeTimer();
 
-    appState.challengeSecondsRemaining = cardData.timeLimit || 30;
+    if (!preserveRemaining || appState.challengeSecondsRemaining <= 0) {
+      appState.challengeSecondsRemaining = cardData.timeLimit || 30;
+    }
     if (timerSeconds) {
       timerSeconds.textContent = String(appState.challengeSecondsRemaining);
     }
@@ -997,12 +1239,10 @@ document.addEventListener("DOMContentLoaded", () => {
         timerSeconds.textContent = String(appState.challengeSecondsRemaining);
       }
 
-      // Warning pulse when <= 10 seconds remaining
       if (appState.challengeSecondsRemaining <= 10 && frontTimerBadge) {
         frontTimerBadge.classList.add("timer-warning");
       }
 
-      // Time expired: automatically end attempt
       if (appState.challengeSecondsRemaining <= 0) {
         stopChallengeTimer();
         const textarea = document.getElementById("open-answer-input");
@@ -1024,40 +1264,33 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ------------------------------------------------------------------------
-  // 12. 3D Card Flip Mechanics & Security
+  // 13. 3D Card Flip Mechanics & Security
   // ------------------------------------------------------------------------
   function toggleCardFlip() {
     const deck = PANITIKARD_DECKS[appState.activeDeckId];
     if (!deck || !deck.cards[appState.activeCardTypeIndex]) return;
 
     const cardData = deck.cards[appState.activeCardTypeIndex];
-    const isSubmitted = !!appState.answers[cardData.id];
-
-    // Card flip security: locked until an answer is submitted
-    if (!isSubmitted) {
-      interactiveCard.classList.remove("shake-card");
-      void interactiveCard.offsetWidth; // Force CSS reflow
-      interactiveCard.classList.add("shake-card");
-      return;
-    }
-
+    if (appState.answers[cardData.id]) return;
     interactiveCard.classList.toggle("is-flipped");
     const isNowFlipped = interactiveCard.classList.contains("is-flipped");
     interactiveCard.dataset.flipped = isNowFlipped ? "true" : "false";
+    setActiveCardFace(interactiveCard, isNowFlipped);
+    updateFlipControlsState(!!appState.answers[cardData.id]);
+
+    if (cardData.timeLimit && !appState.answers[cardData.id]) {
+      if (isNowFlipped) stopChallengeTimer();
+      else startChallengeTimer(cardData, true);
+    }
   }
 
-  // Flip on toolbar button click
   if (btnFlipCard) {
-    btnFlipCard.addEventListener("click", () => {
-      toggleCardFlip();
-    });
+    btnFlipCard.addEventListener("click", toggleCardFlip);
   }
 
-  // Flip on card body click or keyboard Enter/Space
   if (interactiveCard) {
     interactiveCard.addEventListener("click", (e) => {
-      // Don't toggle flip if interacting with input, button, or options inside card
-      if (e.target.closest("textarea") || e.target.closest("button") || e.target.closest(".option-pill")) {
+      if (e.target.closest("textarea") || e.target.closest("button") || e.target.closest(".option-pill") || e.target.closest(".card-feedback-panel")) {
         return;
       }
       toggleCardFlip();
@@ -1072,9 +1305,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ------------------------------------------------------------------------
-  // 13. Toolbar Controls & Card Switching
+  // 14. Toolbar Controls & Card Switching
   // ------------------------------------------------------------------------
-  // Card Switcher Tabs Click Handlers
   cardTypeTabs.forEach((tab, index) => {
     tab.addEventListener("click", () => {
       if (index > appState.highestUnlockedIndex) {
@@ -1087,7 +1319,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Previous Card Button
   if (btnPrevCard) {
     btnPrevCard.addEventListener("click", () => {
       if (appState.activeCardTypeIndex > 0) {
@@ -1096,7 +1327,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // Next Card Button / View Results
   if (btnNextCard) {
     btnNextCard.addEventListener("click", () => {
       const currentCard = PANITIKARD_DECKS[appState.activeDeckId].cards[appState.activeCardTypeIndex];
@@ -1106,14 +1336,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (appState.activeCardTypeIndex < 6) {
         renderCardByTypeIndex(appState.activeCardTypeIndex + 1);
       } else {
-        // Last card completed -> Transition to Results Screen
-        renderResultScreen();
-        navigateToScreen(screens.result);
+        // Last card completed -> Check for Reverse Round eligibility
+        if (!appState.reverseRoundCompleted && appState.incorrectQuestions.length > 0) {
+          showReverseIntro();
+        } else {
+          renderResultScreen();
+          navigateToScreen(screens.result);
+        }
       }
     });
   }
 
-  // Back Navigation from Card Arena to Deck Selection
   if (btnBackToDeck) {
     btnBackToDeck.addEventListener("click", () => {
       stopChallengeTimer();
@@ -1129,170 +1362,8 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // ------------------------------------------------------------------------
-  // 14. Final Results Screen Rendering & Review Information
+  // 15. Screen 2.5: Interactive 15-Question Quiz Engine (Alamat & Maikling Kuwento)
   // ------------------------------------------------------------------------
-  function renderResultScreen() {
-    stopChallengeTimer();
-
-    const deck = PANITIKARD_DECKS[appState.activeDeckId];
-    if (!deck) return;
-
-    let totalScore = 0;
-    let correctCount = 0;
-    const maxScore = 7; // Total max points: 5x1 + 1x2 (Bonus) + 1x0 (Reverse) = 7
-
-    deck.cards.forEach((card) => {
-      const answerRecord = appState.answers[card.id];
-      if (answerRecord) {
-        totalScore += (answerRecord.pointsEarned || 0);
-        if (answerRecord.isCorrect) correctCount++;
-      }
-    });
-
-    const percentage = Math.round((totalScore / maxScore) * 100);
-
-    // Update Results Overview
-    if (resultStudentGreeting) {
-      resultStudentGreeting.textContent = `Binabati kita, ${appState.studentName || "Mag-aaral"}! Natapos mo ang lahat ng 7 kard ng karunungan.`;
-    }
-    if (resultScoreNum) resultScoreNum.textContent = String(totalScore);
-    if (resultScoreMax) resultScoreMax.textContent = String(maxScore);
-    if (resultPercentageBadge) resultPercentageBadge.textContent = `${percentage}% Marka`;
-    if (resultDeckBadge) resultDeckBadge.textContent = `Deck: ${deck.title}`;
-
-    // Performance Qualitative Assessment
-    if (resultPerformanceTitle && resultPerformanceMsg) {
-      if (totalScore === 7) {
-        resultPerformanceTitle.textContent = "🏆 Perpektong Pagganap!";
-        resultPerformanceMsg.textContent = "Natatangi ang iyong kaalaman at pagsusuri sa panitikang Filipino. Ipinamalas mo ang buong karunungan!";
-      } else if (totalScore >= 5) {
-        resultPerformanceTitle.textContent = "🌟 Napakahusay na Pagsubok!";
-        resultPerformanceMsg.textContent = "Malalim ang iyong pag-unawa sa mga pahiwatig at elemento ng akda. May ilang konseptong maaaring repasuhin.";
-      } else if (totalScore >= 3) {
-        resultPerformanceTitle.textContent = "📖 Magandang Pagsisikap!";
-        resultPerformanceMsg.textContent = "May matibay kang pundasyon. Pag-aralan muli ang mga paliwanag at susing salita upang lalong humusay.";
-      } else {
-        resultPerformanceTitle.textContent = "🌱 Ipagpatuloy ang Pagsasanay!";
-        resultPerformanceMsg.textContent = "Huwag panghinaan ng loob. Basahin muli ang mga kaisipan ng akda at subukan muli ang pagsusulit.";
-      }
-    }
-
-    // Render Detailed 7-Card Review List
-    if (resultBreakdownList) {
-      resultBreakdownList.innerHTML = "";
-
-      deck.cards.forEach((card) => {
-        const record = appState.answers[card.id] || {
-          userAnswer: "(Walang naisumite)",
-          correctAnswer: card.answer,
-          isCorrect: false,
-          pointsEarned: 0,
-          explanation: card.explanation,
-          terms: card.terms
-        };
-
-        const typeMeta = PANITIKARD_CARD_TYPES[card.type] || {
-          icon: "🎴",
-          label: card.type
-        };
-
-        const itemCard = document.createElement("div");
-        itemCard.className = `result-item-card ${record.isCorrect ? "result-item-correct" : "result-item-incorrect"}`;
-
-        let pointsClass = "points-missed";
-        if (record.pointsEarned > 0) {
-          pointsClass = "points-correct";
-        } else if (card.type === "reverse") {
-          pointsClass = "points-review";
-        }
-
-        const pointsBadgeText = card.type === "reverse" 
-          ? "0 pt (Pagbabalik-aral)" 
-          : `+${record.pointsEarned}/${card.points} pt`;
-
-        itemCard.innerHTML = `
-          <div class="result-item-top">
-            <span class="result-item-title">
-              <span>${typeMeta.icon} Kard #${card.number}: ${typeMeta.label}</span>
-              <span class="pill-chip">${card.tag}</span>
-            </span>
-            <span class="result-item-points ${pointsClass}">${pointsBadgeText}</span>
-          </div>
-
-          <p class="result-item-prompt">${card.prompt}</p>
-
-          <div class="result-answers-comparison">
-            <div class="student-ans-line">
-              <strong>👤 Iyong Sagot:</strong> ${escapeHtml(record.userAnswer)}
-            </div>
-            <div class="correct-ans-line">
-              <strong>✓ Tamang Sagot / Batayan:</strong> ${escapeHtml(card.answer)}
-            </div>
-          </div>
-
-          <div class="result-item-explanation">
-            <strong>📚 Paliwanag:</strong> ${card.explanation}
-          </div>
-
-          ${record.terms && record.terms.length > 0 ? `
-            <div class="result-item-explanation" style="color: #b45309;">
-              <strong>🔑 Mga Susing Kaisipan (Keywords):</strong> ${record.terms.map(g => g.join(" / ")).join(" &bull; ")}
-            </div>
-          ` : ""}
-        `;
-
-        resultBreakdownList.appendChild(itemCard);
-      });
-    }
-  }
-
-  function escapeHtml(text) {
-    if (!text) return "";
-    return String(text)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
-  }
-
-  // ------------------------------------------------------------------------
-  // 15. Results Action Buttons (Retry, Return to Decks, Home)
-  // ------------------------------------------------------------------------
-  if (btnRetryDeck) {
-    btnRetryDeck.addEventListener("click", () => {
-      if (appState.lastPlayedMode === "quiz") {
-        startQuiz(quizState.activeQuizId);
-      } else {
-        startDeckSession();
-      }
-    });
-  }
-
-  if (btnResultToDecks) {
-    btnResultToDecks.addEventListener("click", () => {
-      stopChallengeTimer();
-      navigateToScreen(screens.deck);
-    });
-  }
-
-  if (btnResultToHome) {
-    btnResultToHome.addEventListener("click", () => {
-      stopChallengeTimer();
-      navigateToScreen(screens.welcome);
-    });
-  }
-
-  // ------------------------------------------------------------------------
-  // 16. Screen 2.5: Interactive 15-Question Quiz Engine (Alamat & Maikling Kuwento)
-  // ------------------------------------------------------------------------
-  
-  /**
-   * Normalizes strings for robust, fair answer validation.
-   * Lowercases, collapses whitespace, removes trailing/leading punctuation.
-   * @param {string} str
-   * @returns {string}
-   */
   function normalizeQuizString(str) {
     if (typeof str !== "string") return "";
     return str
@@ -1302,21 +1373,23 @@ document.addEventListener("DOMContentLoaded", () => {
       .replace(/\s+/g, " ");
   }
 
-  /**
-   * Validates student answers for all 5 question types.
-   * Preserves exact intended answers, supports multi-word situational answers,
-   * and enforces single-word limits for Identification and Fill in the Blank.
-   * @param {Object} question
-   * @param {string} studentInput
-   * @returns {boolean}
-   */
   function checkQuizAnswer(question, studentInput) {
     if (studentInput === null || studentInput === undefined) return false;
     const qType = question.questionType;
     const normalizedInput = normalizeQuizString(studentInput);
     if (!normalizedInput) return false;
 
-    // 1. Multiple Choice (Compare option key or option text)
+    if (["identification", "fill_in_blank", "situational"].includes(qType)) {
+      return PANITIKARD_ANSWER_EVALUATOR.evaluateWrittenAnswer({
+        studentAnswer: studentInput,
+        expectedAnswer: question.answer,
+        acceptedAnswers: question.acceptedAnswers || [],
+        rubricGroups: question.rubricGroups || [],
+        questionId: question.id
+      }).isCorrect;
+    }
+
+    // 1. Multiple Choice
     if (qType === "multiple_choice") {
       const normUser = studentInput.trim().toUpperCase();
       const normAns = question.answer.trim().toUpperCase();
@@ -1340,43 +1413,9 @@ document.addEventListener("DOMContentLoaded", () => {
       return false;
     }
 
-    // 3 & 4. Identification & Fill in the Blank (Single-word answer)
-    if (qType === "identification" || qType === "fill_in_blank") {
-      const words = normalizedInput.split(" ").filter(Boolean);
-      const expectedNormalized = normalizeQuizString(question.answer);
-      const expectedWords = expectedNormalized.split(" ").filter(Boolean);
-
-      // Reject multiple words when single word is expected
-      if (expectedWords.length === 1 && words.length > 1) {
-        return false;
-      }
-
-      const validAnswers = [expectedNormalized];
-      if (Array.isArray(question.acceptedAnswers)) {
-        question.acceptedAnswers.forEach(alt => validAnswers.push(normalizeQuizString(alt)));
-      }
-      return validAnswers.includes(normalizedInput);
-    }
-
-    // 5. Situational (Supports meaningful multi-word answers, e.g. "Alamat ng hayop", "Pataas na Aksyon")
-    if (qType === "situational") {
-      const expectedNormalized = normalizeQuizString(question.answer);
-      const validAnswers = [expectedNormalized];
-      if (Array.isArray(question.acceptedAnswers)) {
-        question.acceptedAnswers.forEach(alt => validAnswers.push(normalizeQuizString(alt)));
-      }
-      return validAnswers.includes(normalizedInput);
-    }
-
     return false;
   }
 
-  /**
-   * Fisher-Yates shuffle algorithm for question randomization.
-   * Clones items to preserve the original data intact.
-   * @param {Array} array
-   * @returns {Array}
-   */
   function shuffleQuestions(array) {
     const arr = array.map(q => ({ ...q }));
     for (let i = arr.length - 1; i > 0; i--) {
@@ -1386,10 +1425,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return arr;
   }
 
-  /**
-   * Launches an interactive 15-question quiz immediately.
-   * @param {string} quizId 'alamat' or 'maikling-kwento'
-   */
   function startQuiz(quizId) {
     const quizDeck = PANITIKARD_DECKS[quizId];
     if (!quizDeck || !Array.isArray(quizDeck.questions)) {
@@ -1398,7 +1433,24 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     appState.lastPlayedMode = "quiz";
+    appState.incorrectQuestions = [];
+    appState.reverseRoundCompleted = false;
+
+    // Reset reverse state
+    stopReverseTimer();
+    reverseState.selectedQuestions = [];
+    reverseState.maxAttempts = 3;
+    reverseState.attemptsRemaining = 3;
+    reverseState.currentIndex = 0;
+    reverseState.pointsEarned = 0;
+    reverseState.answers = {};
+    reverseState.selectedOption = null;
+    reverseState.isSubmitted = false;
+    reverseState.timerId = null;
+    reverseState.secondsRemaining = 0;
+
     quizState.activeQuizId = quizId;
+    beginRemoteGameSession(quizId, "quiz");
     quizState.questions = shuffleQuestions(quizDeck.questions);
     quizState.currentIndex = 0;
     quizState.currentScore = 0;
@@ -1407,27 +1459,15 @@ document.addEventListener("DOMContentLoaded", () => {
     quizState.selectedOption = null;
     quizState.isSubmitted = false;
 
-    // Update Header / Meta
-    if (quizStudentName) {
-      quizStudentName.textContent = appState.studentName || "Mag-aaral";
-    }
-    if (quizLessonBadge) {
-      quizLessonBadge.textContent = quizDeck.title;
-    }
-    if (quizMaxScore) {
-      quizMaxScore.textContent = String(quizState.maxScore);
-    }
-    if (quizCurrentScore) {
-      quizCurrentScore.textContent = "0";
-    }
+    if (quizStudentName) quizStudentName.textContent = appState.studentName || "Mag-aaral";
+    if (quizLessonBadge) quizLessonBadge.textContent = quizDeck.title;
+    if (quizMaxScore) quizMaxScore.textContent = String(quizState.maxScore);
+    if (quizCurrentScore) quizCurrentScore.textContent = "0";
 
     navigateToScreen(screens.quiz);
     renderQuizQuestion();
   }
 
-  /**
-   * Renders the current question and dynamic input controls.
-   */
   function renderQuizQuestion() {
     const q = quizState.questions[quizState.currentIndex];
     if (!q) return;
@@ -1435,7 +1475,6 @@ document.addEventListener("DOMContentLoaded", () => {
     quizState.selectedOption = null;
     quizState.isSubmitted = false;
 
-    // Progress bar and counter
     const currentNum = quizState.currentIndex + 1;
     const totalNum = quizState.questions.length;
     const pct = Math.round((currentNum / totalNum) * 100);
@@ -1443,7 +1482,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (quizQuestionCounter) quizQuestionCounter.textContent = `Tanong ${currentNum} / ${totalNum}`;
     if (quizProgressBarFill) quizProgressBarFill.style.width = `${pct}%`;
 
-    // Difficulty Badge
     if (quizDifficultyBadge) {
       quizDifficultyBadge.className = "difficulty-pill";
       if (q.difficulty === "easy") {
@@ -1458,8 +1496,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Category and Type Badges
-    if (quizCategoryBadge) quizCategoryBadge.textContent = q.category || "Pampanitikan";
+    if (quizCategoryBadge) quizCategoryBadge.textContent = "Tanong";
     if (quizTypeBadge) {
       const typeLabels = {
         multiple_choice: "Maramihang Pagpipilian",
@@ -1468,19 +1505,16 @@ document.addEventListener("DOMContentLoaded", () => {
         fill_in_blank: "Punan ang Patlang",
         situational: "Sitwasyonal"
       };
-      quizTypeBadge.textContent = typeLabels[q.questionType] || q.questionType;
+      quizTypeBadge.textContent = `${q.category || "Pampanitikan"} · ${typeLabels[q.questionType] || q.questionType}`;
     }
 
-    // Question Prompt
     if (quizQuestionText) quizQuestionText.textContent = q.question;
 
-    // Reset alert and feedback boxes
     if (quizAlertBox) quizAlertBox.classList.add("hidden");
     if (quizFeedbackBox) quizFeedbackBox.classList.add("hidden");
     if (quizSubmitWrapper) quizSubmitWrapper.classList.remove("hidden");
     if (btnQuizSubmit) btnQuizSubmit.disabled = false;
 
-    // Render Input Area
     if (quizInputContainer) {
       quizInputContainer.innerHTML = "";
 
@@ -1577,9 +1611,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  /**
-   * Evaluates student's answer, awards points, and reveals immediate feedback.
-   */
   function handleQuizSubmission() {
     if (quizState.isSubmitted) return;
 
@@ -1606,14 +1637,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     quizState.isSubmitted = true;
 
-    // Lock input elements
     if (btnQuizSubmit) btnQuizSubmit.disabled = true;
     if (quizSubmitWrapper) quizSubmitWrapper.classList.add("hidden");
 
     const allInputs = quizInputContainer.querySelectorAll("input, button");
     allInputs.forEach(el => el.disabled = true);
 
-    // Validate answer
     const isCorrect = checkQuizAnswer(q, studentInput);
     const pointsEarned = isCorrect ? (q.points || 1) : 0;
     quizState.currentScore += pointsEarned;
@@ -1622,39 +1651,29 @@ document.addEventListener("DOMContentLoaded", () => {
       quizCurrentScore.textContent = String(quizState.currentScore);
     }
 
-    // Highlight choices visually
     if (q.questionType === "multiple_choice") {
       const opts = quizInputContainer.querySelectorAll(".quiz-mc-option");
       opts.forEach(opt => {
         const key = opt.dataset.key;
-        if (key === q.answer) {
-          opt.classList.add("opt-correct");
-        }
-        if (key === studentInput && !isCorrect) {
-          opt.classList.add("opt-incorrect");
-        }
+        if (key === q.answer) opt.classList.add("opt-correct");
+        if (key === studentInput && !isCorrect) opt.classList.add("opt-incorrect");
       });
     } else if (q.questionType === "true_false") {
       const btns = quizInputContainer.querySelectorAll(".quiz-tf-btn");
       btns.forEach(btn => {
         const val = btn.dataset.val;
-        if (val.toLowerCase() === q.answer.toLowerCase()) {
-          btn.classList.add("opt-correct");
-        }
-        if (val === studentInput && !isCorrect) {
-          btn.classList.add("opt-incorrect");
-        }
+        if (val.toLowerCase() === q.answer.toLowerCase()) btn.classList.add("opt-correct");
+        if (val === studentInput && !isCorrect) btn.classList.add("opt-incorrect");
       });
     }
 
-    // Build correct answer string
     let correctDisplay = q.answer;
     if (q.questionType === "multiple_choice" && q.choices) {
       const found = q.choices.find(c => c.key === q.answer);
       if (found) correctDisplay = `${q.answer}. ${found.text}`;
     }
 
-    // Record answer
+    // Record quiz answer
     quizState.userAnswers[q.id] = {
       question: q.question,
       category: q.category,
@@ -1664,8 +1683,40 @@ document.addEventListener("DOMContentLoaded", () => {
       isCorrect,
       pointsEarned,
       maxPoints: q.points || 1,
-      explanation: q.explanation
+      explanation: q.explanation,
+      evaluationMethod: ["identification", "fill_in_blank", "situational"].includes(q.questionType) ? "local_rubric" : "answer_key",
+      evaluationContext: ["identification", "fill_in_blank", "situational"].includes(q.questionType) ? {
+        question: q.question,
+        expectedAnswer: q.answer,
+        acceptedAnswers: q.acceptedAnswers || [],
+        rubricGroups: PANITIKARD_ANSWER_EVALUATOR.quizRubrics[q.id] || q.rubricGroups || [],
+        studentAnswer: studentInput
+      } : null
     };
+    persistRemoteAnswer(q.id, studentInput, "main");
+
+    // Record incorrect question for Reverse Round
+    if (!isCorrect) {
+      const exists = appState.incorrectQuestions.some(item => item.id === q.id);
+      if (!exists) {
+        appState.incorrectQuestions.push({
+          id: q.id,
+          source: "quiz",
+          title: `${q.category || "Pampanitikan"} - Tanong #${quizState.currentIndex + 1}`,
+          question: q.question,
+          category: q.category || "Pampanitikan",
+          questionType: q.questionType,
+          choices: q.choices ? [...q.choices] : null,
+          answer: q.answer,
+          acceptedAnswers: q.acceptedAnswers ? [...q.acceptedAnswers] : null,
+          rubricGroups: PANITIKARD_ANSWER_EVALUATOR.quizRubrics[q.id] || [],
+          explanation: q.explanation,
+          points: q.points || 1,
+          timeLimit: q.timeLimit || q.timeLimitSeconds || null,
+          difficulty: q.difficulty || "average"
+        });
+      }
+    }
 
     // Populate Feedback Box
     if (quizFeedbackBox) {
@@ -1673,29 +1724,30 @@ document.addEventListener("DOMContentLoaded", () => {
       if (quizFeedbackHeader) {
         quizFeedbackHeader.className = `feedback-header ${isCorrect ? "feedback-correct" : "feedback-incorrect"}`;
       }
-      if (quizFeedbackIcon) {
-        quizFeedbackIcon.textContent = isCorrect ? "✓" : "✗";
-      }
-      if (quizFeedbackStatus) {
-        quizFeedbackStatus.textContent = isCorrect ? "TAMA!" : "MALI";
-      }
+      if (quizFeedbackIcon) quizFeedbackIcon.textContent = isCorrect ? "✓" : "✗";
+      if (quizFeedbackStatus) quizFeedbackStatus.textContent = isCorrect ? "TAMA!" : "MALI";
       if (quizFeedbackPoints) {
         quizFeedbackPoints.textContent = isCorrect 
           ? `+${pointsEarned} ${pointsEarned > 1 ? "Puntos" : "Punto"}`
           : "0 Punto";
       }
-      if (quizFeedbackCorrectAnswer) {
-        quizFeedbackCorrectAnswer.textContent = correctDisplay;
-      }
-      if (quizFeedbackExplanation) {
-        quizFeedbackExplanation.textContent = q.explanation;
+      if (quizFeedbackCorrectAnswer) quizFeedbackCorrectAnswer.textContent = correctDisplay;
+      if (quizFeedbackExplanation) quizFeedbackExplanation.textContent = q.explanation;
+      const rubricGroups = PANITIKARD_ANSWER_EVALUATOR.quizRubrics[q.id] || q.rubricGroups || [];
+      if (quizFeedbackKeywordsWrap && quizFeedbackKeywords) {
+        quizFeedbackKeywordsWrap.classList.toggle("hidden", !rubricGroups.length);
+        quizFeedbackKeywords.textContent = rubricGroups.map(group => group.join(" / ")).join(" • ");
       }
 
       const isLastQuestion = quizState.currentIndex === quizState.questions.length - 1;
       if (quizNextBtnText) {
-        quizNextBtnText.textContent = isLastQuestion 
-          ? "Tingnan ang Kabuuang Resulta" 
-          : "Susunod na Tanong";
+        if (isLastQuestion) {
+          quizNextBtnText.textContent = (!appState.reverseRoundCompleted && appState.incorrectQuestions.length > 0)
+            ? "Tungo sa Reverse Round 🔁"
+            : "Tingnan ang Kabuuang Resulta";
+        } else {
+          quizNextBtnText.textContent = "Susunod na Tanong";
+        }
       }
 
       quizFeedbackBox.classList.remove("hidden");
@@ -1703,7 +1755,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Quiz Action Listeners
   if (btnQuizSubmit) {
     btnQuizSubmit.addEventListener("click", handleQuizSubmission);
   }
@@ -1714,7 +1765,12 @@ document.addEventListener("DOMContentLoaded", () => {
         quizState.currentIndex++;
         renderQuizQuestion();
       } else {
-        renderQuizResults();
+        // Quiz completed -> Check for Reverse Round eligibility
+        if (!appState.reverseRoundCompleted && appState.incorrectQuestions.length > 0) {
+          showReverseIntro();
+        } else {
+          renderQuizResults();
+        }
       }
     });
   }
@@ -1725,32 +1781,767 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // ------------------------------------------------------------------------
+  // 16. Reverse Round Implementation (Screens 3.7 & 3.8)
+  // ------------------------------------------------------------------------
   /**
-   * Renders the Final Results Screen for 15-Question Quizzes.
-   * Computes dynamic percentage, counts, and card-by-card review.
+   * Displays the Reverse Round introduction screen.
+   */
+  function showReverseIntro() {
+    stopChallengeTimer();
+    const count = appState.incorrectQuestions.length;
+    if (reverseEligibleCount) {
+      reverseEligibleCount.textContent = String(count);
+    }
+    if (reverseAttemptLimitLabel) {
+      if (count === 1) {
+        reverseAttemptLimitLabel.textContent = "(Mayroon kang 1 pagsubok)";
+      } else if (count === 2) {
+        reverseAttemptLimitLabel.textContent = "(Mayroon kang 2 pagsubok)";
+      } else {
+        reverseAttemptLimitLabel.textContent = "(Hanggang 3 ang mapipili)";
+      }
+    }
+    navigateToScreen(screens.reverseIntro);
+  }
+
+  /**
+   * Initializes Reverse Round with up to 3 randomly selected incorrect questions.
+   */
+  function startReverseRound() {
+    stopReverseTimer();
+    if (appState.incorrectQuestions.length === 0) {
+      finishReverseRound();
+      return;
+    }
+
+    // Question Selection Rules:
+    // Maximum 3 attempts for entire game. Random selection happens once.
+    const pool = shuffleQuestions(appState.incorrectQuestions);
+    const maxAllowed = Math.min(3, pool.length);
+    reverseState.selectedQuestions = pool.slice(0, maxAllowed);
+    reverseState.maxAttempts = maxAllowed;
+    reverseState.attemptsRemaining = maxAllowed;
+    reverseState.currentIndex = 0;
+    reverseState.pointsEarned = 0;
+    reverseState.answers = {};
+    reverseState.selectedOption = null;
+    reverseState.isSubmitted = false;
+    reverseState.timerId = null;
+    reverseState.secondsRemaining = 0;
+
+    navigateToScreen(screens.reverse);
+    renderReverseCard();
+  }
+
+  function updateReverseAttemptUI() {
+    if (reverseAttemptText) {
+      reverseAttemptText.textContent = `${reverseState.attemptsRemaining}/${reverseState.maxAttempts} natitira`;
+    }
+    if (reverseAttemptDots) {
+      reverseAttemptDots.innerHTML = "";
+      for (let i = 0; i < reverseState.maxAttempts; i++) {
+        const dot = document.createElement("span");
+        dot.className = `attempt-dot ${i < reverseState.attemptsRemaining ? "active" : ""}`;
+        reverseAttemptDots.appendChild(dot);
+      }
+    }
+  }
+
+  // ------------------------------------------------------------------------
+  // Reverse Round Countdown Timer Helpers
+  // ------------------------------------------------------------------------
+  function getQuestionTimeLimit(q) {
+    if (!q) return null;
+    const limit = q.timeLimit ?? q.timeLimitSeconds ?? q.originalCard?.timeLimit ?? q.originalCard?.timeLimitSeconds ?? null;
+    return typeof limit === "number" && limit > 0 ? limit : null;
+  }
+
+  function updateReverseTimerDisplay(seconds, isWarning = false) {
+    const secStr = String(Math.max(0, seconds));
+    if (reverseTimerSeconds) reverseTimerSeconds.textContent = secStr;
+    if (reverseHeaderTimerSeconds) reverseHeaderTimerSeconds.textContent = secStr;
+    if (reverseTimerBadge) reverseTimerBadge.classList.toggle("timer-warning", isWarning);
+    if (reverseHeaderTimerBadge) reverseHeaderTimerBadge.classList.toggle("timer-warning", isWarning);
+  }
+
+  function setReverseTimerVisible(visible) {
+    if (reverseTimerBadge) {
+      reverseTimerBadge.classList.toggle("hidden", !visible);
+      if (!visible) reverseTimerBadge.classList.remove("timer-warning");
+    }
+    if (reverseHeaderTimerBadge) {
+      reverseHeaderTimerBadge.classList.toggle("hidden", !visible);
+      if (!visible) reverseHeaderTimerBadge.classList.remove("timer-warning");
+    }
+  }
+
+  function stopReverseTimer() {
+    if (reverseState.timerId) {
+      clearInterval(reverseState.timerId);
+      reverseState.timerId = null;
+    }
+    if (reverseTimerBadge) reverseTimerBadge.classList.remove("timer-warning");
+    if (reverseHeaderTimerBadge) reverseHeaderTimerBadge.classList.remove("timer-warning");
+  }
+
+  function startReverseTimer(q, preserveRemaining = false) {
+    stopReverseTimer();
+    const timeLimit = getQuestionTimeLimit(q);
+    if (!timeLimit || reverseState.isSubmitted) {
+      setReverseTimerVisible(false);
+      return;
+    }
+
+    if (!preserveRemaining || reverseState.secondsRemaining <= 0) {
+      reverseState.secondsRemaining = timeLimit;
+    }
+
+    setReverseTimerVisible(true);
+    updateReverseTimerDisplay(reverseState.secondsRemaining, reverseState.secondsRemaining <= 10);
+
+    reverseState.timerId = setInterval(() => {
+      reverseState.secondsRemaining--;
+      const remaining = reverseState.secondsRemaining;
+      updateReverseTimerDisplay(remaining, remaining <= 10);
+
+      if (remaining <= 0) {
+        stopReverseTimer();
+        handleReverseTimeout(q);
+      }
+    }, 1000);
+  }
+
+  function handleReverseTimeout(q) {
+    if (reverseState.isSubmitted) return;
+    const currentQ = q || reverseState.selectedQuestions[reverseState.currentIndex];
+    let timeoutAnswer = "";
+    if (currentQ?.questionType === "multiple_choice" || currentQ?.questionType === "true_false") {
+      timeoutAnswer = reverseState.selectedOption || "(Naubos ang 30 segundo / Walang napili)";
+    } else {
+      const inputEl = document.getElementById("reverse-text-answer");
+      const existing = inputEl ? inputEl.value.trim() : "";
+      timeoutAnswer = existing || "(Naubos ang 30 segundo / Walang naisulat)";
+    }
+    handleReverseSubmit(true, timeoutAnswer);
+  }
+
+  function toggleReverseCardFlip() {
+    if (!reverseCard || reverseState.isSubmitted) return;
+    reverseCard.classList.toggle("is-flipped");
+    const isNowFlipped = reverseCard.classList.contains("is-flipped");
+    reverseCard.dataset.flipped = isNowFlipped ? "true" : "false";
+    setActiveCardFace(reverseCard, isNowFlipped);
+    if (reverseSubmitWrap) reverseSubmitWrap.classList.toggle("hidden", isNowFlipped);
+
+    const q = reverseState.selectedQuestions[reverseState.currentIndex];
+    const timeLimit = getQuestionTimeLimit(q);
+    if (timeLimit && !reverseState.isSubmitted) {
+      if (isNowFlipped) {
+        stopReverseTimer();
+      } else {
+        startReverseTimer(q, true);
+      }
+    }
+  }
+
+  /**
+   * Renders the Special Red Reverse Card with the current question.
+   */
+  function renderReverseCard() {
+    stopReverseTimer();
+    const q = reverseState.selectedQuestions[reverseState.currentIndex];
+    if (!q) {
+      finishReverseRound();
+      return;
+    }
+
+    reverseState.selectedOption = null;
+    reverseState.isSubmitted = false;
+
+    // Time limit setup
+    const timeLimit = getQuestionTimeLimit(q);
+    if (timeLimit) {
+      reverseState.secondsRemaining = timeLimit;
+      updateReverseTimerDisplay(timeLimit, false);
+      setReverseTimerVisible(true);
+    } else {
+      reverseState.secondsRemaining = 0;
+      setReverseTimerVisible(false);
+    }
+
+    // Each second-chance question starts on the green branded back.
+    if (reverseCard) {
+      reverseCard.classList.add("is-flipped");
+      reverseCard.dataset.flipped = "true";
+      setActiveCardFace(reverseCard, true);
+    }
+    if (reverseCardBackBrandContent) reverseCardBackBrandContent.classList.remove("hidden");
+
+    // Update Attempt Counter & Dots
+    updateReverseAttemptUI();
+
+    // Score badge
+    if (reverseScoreText) {
+      reverseScoreText.textContent = `+${reverseState.pointsEarned} Puntos`;
+    }
+
+    // Card Header & Front Meta
+    if (reverseCardNum) {
+      reverseCardNum.textContent = `0${reverseState.currentIndex + 1}`;
+    }
+    if (reverseCardCategoryBadge) {
+      reverseCardCategoryBadge.textContent = "Baligtaran";
+    }
+    if (reverseCardTitle) {
+      reverseCardTitle.textContent = q.title || `Subukan Muli ang Tanong #${reverseState.currentIndex + 1}`;
+    }
+    if (reverseCardPrompt) {
+      reverseCardPrompt.textContent = q.question;
+    }
+
+    // Reset alert and feedback boxes
+    if (reverseAlertBox) reverseAlertBox.classList.add("hidden");
+    if (reverseFeedbackBox) reverseFeedbackBox.classList.add("hidden");
+    if (reverseSubmitWrap) reverseSubmitWrap.classList.add("hidden");
+    if (btnReverseSubmit) btnReverseSubmit.disabled = false;
+
+    // Render Options / Inputs
+    if (reverseCardOptions) {
+      reverseCardOptions.innerHTML = "";
+      reverseCardOptions.className = q.questionType === "multiple_choice" || q.questionType === "true_false"
+        ? "card-options-grid"
+        : "card-options-open";
+
+      // 1. Multiple Choice
+      if (q.questionType === "multiple_choice" && Array.isArray(q.choices) && q.choices.length > 0) {
+        const grid = document.createElement("div");
+        grid.className = "quiz-mc-grid";
+
+        q.choices.forEach((c) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "quiz-mc-option";
+          btn.dataset.key = c.key;
+          btn.innerHTML = `
+            <span class="quiz-option-key">${c.key}</span>
+            <span class="quiz-option-text">${escapeHtml(c.text)}</span>
+          `;
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (reverseState.isSubmitted) return;
+            reverseState.selectedOption = c.key;
+            grid.querySelectorAll(".quiz-mc-option").forEach(b => b.classList.remove("selected"));
+            btn.classList.add("selected");
+            if (reverseAlertBox) reverseAlertBox.classList.add("hidden");
+          });
+          grid.appendChild(btn);
+        });
+        reverseCardOptions.appendChild(grid);
+      }
+      // 2. True or False
+      else if (q.questionType === "true_false") {
+        const group = document.createElement("div");
+        group.className = "quiz-tf-group";
+
+        const tfChoices = [
+          { val: "True", icon: "✓", label: "Tama (True)" },
+          { val: "False", icon: "✗", label: "Mali (False)" }
+        ];
+
+        tfChoices.forEach((t) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "quiz-tf-btn";
+          btn.dataset.val = t.val;
+          btn.innerHTML = `
+            <span class="quiz-tf-icon">${t.icon}</span>
+            <span>${t.label}</span>
+          `;
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (reverseState.isSubmitted) return;
+            reverseState.selectedOption = t.val;
+            group.querySelectorAll(".quiz-tf-btn").forEach(b => b.classList.remove("selected"));
+            btn.classList.add("selected");
+            if (reverseAlertBox) reverseAlertBox.classList.add("hidden");
+          });
+          group.appendChild(btn);
+        });
+        reverseCardOptions.appendChild(group);
+      }
+      // 3. Open-Ended (from Arena Decks)
+      else if (q.questionType === "open_ended") {
+        const wrap = document.createElement("div");
+        wrap.className = "open-card-form";
+        wrap.innerHTML = `
+          <textarea id="reverse-text-answer" class="open-card-textarea"
+            placeholder="Isulat dito ang iyong sagot o pagwawasto..." rows="2" maxlength="280"></textarea>
+          <span class="quiz-input-hint-text">Ipaliwanag o iwasto ang pahayag gamit ang mga angkop na salita.</span>
+        `;
+        const textarea = wrap.querySelector("#reverse-text-answer");
+        textarea.addEventListener("click", (e) => e.stopPropagation());
+        textarea.addEventListener("input", () => {
+          if (reverseAlertBox) reverseAlertBox.classList.add("hidden");
+        });
+        textarea.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            handleReverseSubmit();
+          }
+        });
+        reverseCardOptions.appendChild(wrap);
+      }
+      // 4. Identification, Fill in the Blank, Situational
+      else {
+        const wrap = document.createElement("div");
+        wrap.className = "quiz-text-input-wrap";
+        const isSingleWord = q.questionType === "identification" || q.questionType === "fill_in_blank";
+        wrap.innerHTML = `
+          <input type="text" id="reverse-text-answer" class="quiz-text-input"
+            placeholder="${isSingleWord ? "Isulat dito ang iyong sagot (isang salita)..." : "Isulat dito ang iyong sagot batay sa sitwasyon..."}" autocomplete="off">
+          <span class="quiz-input-hint-text">${isSingleWord ? "Isang salita lamang ang inaasahang sagot." : "Maaaring isang salita o maikling parirala."}</span>
+        `;
+        const inputEl = wrap.querySelector("#reverse-text-answer");
+        inputEl.addEventListener("click", (e) => e.stopPropagation());
+        inputEl.addEventListener("input", () => {
+          if (reverseAlertBox) reverseAlertBox.classList.add("hidden");
+        });
+        inputEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            handleReverseSubmit();
+          }
+        });
+        reverseCardOptions.appendChild(wrap);
+      }
+    }
+  }
+
+  /**
+   * Handles Reverse Round submission, evaluates response, and updates attempts.
+   */
+  function handleReverseSubmit(isTimeout = false, forcedInput = null) {
+    stopReverseTimer();
+    if (reverseState.isSubmitted) return;
+    if (reverseState.attemptsRemaining <= 0) return;
+
+    const q = reverseState.selectedQuestions[reverseState.currentIndex];
+    if (!q) return;
+
+    if (!isTimeout && reverseCard && reverseCard.classList.contains("is-flipped")) {
+      if (reverseAlertBox) reverseAlertBox.classList.remove("hidden");
+      if (reverseAlertText) reverseAlertText.textContent = "I-tap muna ang berdeng likod ng kard upang makita ang tanong.";
+      return;
+    }
+
+    let studentInput = null;
+    if (isTimeout) {
+      studentInput = forcedInput || "(Naubos ang 30 segundo / Walang sagot)";
+    } else if (q.questionType === "multiple_choice" || q.questionType === "true_false") {
+      studentInput = reverseState.selectedOption;
+    } else {
+      const inputEl = document.getElementById("reverse-text-answer");
+      studentInput = inputEl ? inputEl.value.trim() : "";
+    }
+
+    if (!studentInput) {
+      if (reverseAlertBox) {
+        reverseAlertBox.classList.remove("hidden");
+        if (reverseAlertText) {
+          reverseAlertText.textContent = "Pakilagay o piliin ang iyong sagot bago mag-submit.";
+        }
+      }
+      return;
+    }
+
+    reverseState.isSubmitted = true;
+    reverseState.attemptsRemaining = Math.max(0, reverseState.attemptsRemaining - 1);
+    updateReverseAttemptUI();
+
+    // Lock inputs & hide submit button
+    if (btnReverseSubmit) btnReverseSubmit.disabled = true;
+    if (reverseSubmitWrap) reverseSubmitWrap.classList.add("hidden");
+    if (reverseCardOptions) {
+      const inputs = reverseCardOptions.querySelectorAll("input, button, textarea");
+      inputs.forEach(el => el.disabled = true);
+    }
+
+    // Evaluate response
+    let isCorrect = false;
+    let pointsEarned = 0;
+
+    if (isTimeout) {
+      isCorrect = false;
+      pointsEarned = 0;
+    } else if (q.questionType === "open_ended") {
+      const evalResult = evaluateOpenEndedAnswer(studentInput, q.originalCard || q);
+      isCorrect = evalResult.isCorrect;
+      pointsEarned = isCorrect ? (q.points || 1) : 0;
+    } else {
+      isCorrect = checkQuizAnswer(q, studentInput);
+      pointsEarned = isCorrect ? (q.points || 1) : 0;
+    }
+
+    if (isCorrect) {
+      reverseState.pointsEarned += pointsEarned;
+      if (reverseScoreText) {
+        reverseScoreText.textContent = `+${reverseState.pointsEarned} Puntos`;
+      }
+    }
+
+    // Highlight choices visually
+    if (q.questionType === "multiple_choice" && reverseCardOptions) {
+      const opts = reverseCardOptions.querySelectorAll(".quiz-mc-option");
+      opts.forEach(opt => {
+        const key = opt.dataset.key;
+        if (key === q.answer) opt.classList.add("opt-correct");
+        if (key === studentInput && !isCorrect) opt.classList.add("opt-incorrect");
+      });
+    } else if (q.questionType === "true_false" && reverseCardOptions) {
+      const btns = reverseCardOptions.querySelectorAll(".quiz-tf-btn");
+      btns.forEach(btn => {
+        const val = btn.dataset.val;
+        if (val.toLowerCase() === q.answer.toLowerCase()) btn.classList.add("opt-correct");
+        if (val === studentInput && !isCorrect) btn.classList.add("opt-incorrect");
+      });
+    }
+
+    // Correct Answer Display Text
+    let correctDisplay = q.answer;
+    if (q.questionType === "multiple_choice" && Array.isArray(q.choices)) {
+      const found = q.choices.find(c => c.key === q.answer);
+      if (found) correctDisplay = `${q.answer}. ${found.text}`;
+    }
+
+    // Record reverse attempt separately (main round records remain untouched)
+    reverseState.answers[q.id] = {
+      questionId: q.id,
+      question: q.question,
+      category: q.category,
+      questionType: q.questionType,
+      userAnswer: studentInput,
+      correctAnswer: correctDisplay,
+      isCorrect: isCorrect,
+      pointsEarned: pointsEarned,
+      maxPoints: q.points || 1,
+      explanation: q.explanation,
+      isTimeout: isTimeout === true,
+      evaluationMethod: isTimeout ? "timeout" : (q.questionType === "open_ended" || ["identification", "fill_in_blank", "situational"].includes(q.questionType)
+        ? "local_rubric"
+        : "answer_key"),
+      evaluationContext: q.questionType === "open_ended" || ["identification", "fill_in_blank", "situational"].includes(q.questionType) ? {
+        question: q.question,
+        expectedAnswer: q.answer,
+        acceptedAnswers: q.acceptedAnswers || [],
+        rubricGroups: q.terms || q.rubricGroups || (q.originalCard && q.originalCard.terms) || [],
+        studentAnswer: studentInput
+      } : null
+    };
+    persistRemoteAnswer(q.id, studentInput, "reverse", { isTimeout });
+
+    // Render Formative Feedback Box
+    if (reverseFeedbackBox) {
+      reverseFeedbackBox.className = `card-feedback-panel ${isCorrect ? "feedback-panel-correct" : "feedback-panel-incorrect"}`;
+      if (reverseFeedbackHeader) {
+        reverseFeedbackHeader.className = `card-feedback-head ${isCorrect ? "feedback-correct" : "feedback-incorrect"}`;
+      }
+      if (reverseFeedbackIcon) {
+        reverseFeedbackIcon.textContent = isTimeout ? "⏱️" : (isCorrect ? "✓" : "✗");
+      }
+      if (reverseFeedbackStatus) {
+        reverseFeedbackStatus.textContent = isTimeout ? "NAUBOS ANG ORAS!" : (isCorrect ? "TAMA SA REVERSE ROUND!" : "HINDI TUMUGMA");
+      }
+      if (reverseFeedbackPoints) {
+        reverseFeedbackPoints.textContent = isCorrect
+          ? `+${pointsEarned} ${pointsEarned > 1 ? "Puntos" : "Punto"}`
+          : "0 Punto";
+      }
+      if (reverseFeedbackMessage) {
+        reverseFeedbackMessage.textContent = isTimeout
+          ? "Naubos ang itinakdang 30 segundo para sa tanong na ito sa Reverse Round."
+          : (isCorrect
+            ? "Tugma ang sagot sa itinakdang sagot at pamantayan."
+            : "Hindi naabot ng sagot ang mga pamantayang itinakda para sa tanong na ito.");
+      }
+      if (reverseFeedbackStudentAnswer) reverseFeedbackStudentAnswer.textContent = studentInput;
+      if (reverseFeedbackAnswer) {
+        reverseFeedbackAnswer.textContent = correctDisplay;
+      }
+      if (reverseFeedbackExplanation) {
+        reverseFeedbackExplanation.textContent = q.explanation;
+      }
+      const reviewTerms = q.terms || (q.originalCard && q.originalCard.terms) || q.rubricGroups || [];
+      if (reverseFeedbackTerms && reverseFeedbackTermsText) {
+        reverseFeedbackTerms.classList.toggle("hidden", !reviewTerms.length);
+        reverseFeedbackTermsText.textContent = reviewTerms.map(group => group.join(" / ")).join(" • ");
+      }
+
+      const isExhausted = (reverseState.attemptsRemaining <= 0) ||
+                          (reverseState.currentIndex >= reverseState.selectedQuestions.length - 1);
+
+      if (reverseNextBtnText) {
+        reverseNextBtnText.textContent = isExhausted ? "Tingnan ang Kabuuang Resulta" : "Susunod na Tanong";
+      }
+
+      reverseFeedbackBox.classList.remove("hidden");
+    }
+
+    if (reverseCardBackBrandContent) reverseCardBackBrandContent.classList.add("hidden");
+    if (reverseSubmitWrap) reverseSubmitWrap.classList.add("hidden");
+    if (reverseCard) {
+      reverseCard.classList.add("is-flipped");
+      reverseCard.dataset.flipped = "true";
+      setActiveCardFace(reverseCard, true);
+    }
+  }
+
+  function handleReverseNext() {
+    stopReverseTimer();
+    const isExhausted = (reverseState.attemptsRemaining <= 0) ||
+                        (reverseState.currentIndex >= reverseState.selectedQuestions.length - 1);
+
+    if (isExhausted) {
+      finishReverseRound();
+    } else {
+      reverseState.currentIndex++;
+      renderReverseCard();
+    }
+  }
+
+  function finishReverseRound() {
+    stopReverseTimer();
+    appState.reverseRoundCompleted = true;
+    if (appState.lastPlayedMode === "quiz") {
+      renderQuizResults();
+    } else {
+      renderResultScreen();
+      navigateToScreen(screens.result);
+    }
+  }
+
+  if (btnStartReverseRound) btnStartReverseRound.addEventListener("click", startReverseRound);
+  if (btnSkipReverseRound) btnSkipReverseRound.addEventListener("click", finishReverseRound);
+  if (btnReverseBackDecks) btnReverseBackDecks.addEventListener("click", () => {
+    stopReverseTimer();
+    navigateToScreen(screens.deck);
+  });
+  if (btnReverseSubmit) btnReverseSubmit.addEventListener("click", () => handleReverseSubmit(false));
+  if (btnReverseNext) btnReverseNext.addEventListener("click", handleReverseNext);
+  if (btnReverseFlipCard) btnReverseFlipCard.addEventListener("click", toggleReverseCardFlip);
+  if (reverseCard) {
+    reverseCard.addEventListener("click", (e) => {
+      if (e.target.closest("input, textarea, button, .quiz-mc-option, .quiz-tf-btn, .card-feedback-panel")) return;
+      toggleReverseCardFlip();
+    });
+
+    reverseCard.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && !e.target.closest("input, textarea")) {
+        e.preventDefault();
+        toggleReverseCardFlip();
+      }
+    });
+  }
+
+  // ------------------------------------------------------------------------
+  // 17. Final Results Screen Rendering (Card Arena & Quiz)
+  // ------------------------------------------------------------------------
+  /**
+   * Renders Final Results Screen for 7-Card Arena Decks.
+   * Integrates Main Round Score + Reverse Round Points = Updated Final Total.
+   */
+  function renderResultScreen() {
+    stopChallengeTimer();
+    finishRemoteGameSession();
+
+    const deck = PANITIKARD_DECKS[appState.activeDeckId];
+    if (!deck) return;
+
+    let mainRoundScore = 0;
+    let mainCorrectCount = 0;
+    const maxScore = 7;
+
+    deck.cards.forEach((card) => {
+      const record = appState.answers[card.id];
+      if (record) {
+        mainRoundScore += (record.pointsEarned || 0);
+        if (record.isCorrect) mainCorrectCount++;
+      }
+    });
+
+    const reverseRoundPoints = reverseState.pointsEarned || 0;
+    const finalTotalScore = mainRoundScore + reverseRoundPoints;
+    const percentage = Math.min(100, Math.round((finalTotalScore / maxScore) * 100));
+
+    if (resultStudentGreeting) {
+      resultStudentGreeting.textContent = `Binabati kita, ${appState.studentName || "Mag-aaral"}! Natapos mo ang lahat ng 7 kard ng karunungan.`;
+    }
+    if (resultScoreNum) resultScoreNum.textContent = String(finalTotalScore);
+    if (resultScoreMax) resultScoreMax.textContent = String(maxScore);
+    if (resultPercentageBadge) resultPercentageBadge.textContent = `${percentage}% Marka`;
+    if (resultDeckBadge) resultDeckBadge.textContent = `Deck: ${deck.title}`;
+
+    if (resultCorrectCount) resultCorrectCount.textContent = String(mainCorrectCount);
+    if (resultIncorrectCount) resultIncorrectCount.textContent = String(deck.cards.length - mainCorrectCount);
+
+    // Score Breakdown Strip
+    if (resultMainRoundPts) resultMainRoundPts.textContent = String(mainRoundScore);
+    if (resultReversePts) resultReversePts.textContent = reverseRoundPoints > 0 ? `+${reverseRoundPoints}` : "+0";
+    if (resultFinalTotalPts) resultFinalTotalPts.textContent = String(finalTotalScore);
+
+    // Reverse Stat Pill
+    if (resultStatReversePill) {
+      const correctedCount = Object.values(reverseState.answers).filter(a => a.isCorrect).length;
+      if (appState.reverseRoundCompleted && Object.keys(reverseState.answers).length > 0) {
+        resultStatReversePill.classList.remove("hidden");
+        if (resultReverseCount) resultReverseCount.textContent = String(correctedCount);
+      } else {
+        resultStatReversePill.classList.add("hidden");
+      }
+    }
+
+    // Performance Qualitative Assessment
+    if (resultPerformanceTitle && resultPerformanceMsg) {
+      if (finalTotalScore >= 7) {
+        resultPerformanceTitle.textContent = "🏆 Perpektong Pagganap!";
+        resultPerformanceMsg.textContent = "Natatangi ang iyong kaalaman at pagsusuri sa panitikang Filipino. Ipinamalas mo ang buong karunungan!";
+      } else if (finalTotalScore >= 5) {
+        resultPerformanceTitle.textContent = "🌟 Napakahusay na Pagsubok!";
+        resultPerformanceMsg.textContent = "Malalim ang iyong pag-unawa sa mga pahiwatig at elemento ng akda. May ilang konseptong maaaring repasuhin.";
+      } else if (finalTotalScore >= 3) {
+        resultPerformanceTitle.textContent = "📖 Magandang Pagsisikap!";
+        resultPerformanceMsg.textContent = "May matibay kang pundasyon. Pag-aralan muli ang mga paliwanag at susing salita upang lalong humusay.";
+      } else {
+        resultPerformanceTitle.textContent = "🌱 Ipagpatuloy ang Pagsasanay!";
+        resultPerformanceMsg.textContent = "Huwag panghinaan ng loob. Basahin muli ang mga kaisipan ng akda at subukan muli ang pagsusulit.";
+      }
+    }
+
+    if (resultReviewHeading) {
+      resultReviewHeading.textContent = "📋 Detalyadong Pagsusuri ng bawat Tanong";
+    }
+    if (resultReviewSub) {
+      resultReviewSub.textContent = "Suriin ang iyong mga sagot at ang tamang pampanitikang paliwanag.";
+    }
+
+    // Render Detailed 7-Card Review List
+    if (resultBreakdownList) {
+      resultBreakdownList.innerHTML = "";
+
+      deck.cards.forEach((card) => {
+        const record = appState.answers[card.id] || {
+          userAnswer: "(Walang naisumite)",
+          correctAnswer: card.answer,
+          isCorrect: false,
+          pointsEarned: 0,
+          explanation: card.explanation,
+          terms: card.terms
+        };
+
+        const typeMeta = PANITIKARD_CARD_TYPES[card.type] || {
+          icon: "🎴",
+          label: card.type
+        };
+
+        const itemCard = document.createElement("div");
+        itemCard.className = `result-item-card ${record.isCorrect ? "result-item-correct" : "result-item-incorrect"}`;
+
+        let pointsClass = "points-missed";
+        if (record.pointsEarned > 0) {
+          pointsClass = "points-correct";
+        } else if (card.type === "reverse") {
+          pointsClass = "points-review";
+        }
+
+        const pointsBadgeText = card.type === "reverse"
+          ? "0 pt (Pagbabalik-aral)"
+          : `+${record.pointsEarned}/${card.points} pt`;
+
+        itemCard.innerHTML = `
+          <div class="result-item-top">
+            <span class="result-item-title">
+              <span>${typeMeta.icon} Kard #${card.number}: ${typeMeta.label}</span>
+              <span class="pill-chip">${card.tag}</span>
+            </span>
+            <span class="result-item-points ${pointsClass}">${pointsBadgeText}</span>
+          </div>
+
+          <p class="result-item-prompt">${escapeHtml(card.prompt)}</p>
+
+          <div class="result-answers-comparison">
+            <div class="student-ans-line">
+              <strong>👤 Iyong Sagot:</strong> ${escapeHtml(record.userAnswer)}
+            </div>
+            <div class="correct-ans-line">
+              <strong>✓ Tamang Sagot / Batayan:</strong> ${escapeHtml(card.answer)}
+            </div>
+          </div>
+
+          <div class="result-item-explanation">
+            <strong>📚 Paliwanag:</strong> ${escapeHtml(card.explanation)}
+          </div>
+
+          ${record.terms && record.terms.length > 0 ? `
+            <div class="result-item-explanation" style="color: #b45309;">
+              <strong>🔑 Mga Susing Kaisipan (Keywords):</strong> ${record.terms.map(g => g.join(" / ")).join(" &bull; ")}
+            </div>
+          ` : ""}
+        `;
+
+        resultBreakdownList.appendChild(itemCard);
+      });
+
+      // Append Reverse Round Second-Chance Section if played
+      if (appState.reverseRoundCompleted && Object.keys(reverseState.answers).length > 0) {
+        appendReverseRoundReviews();
+      }
+    }
+  }
+
+  /**
+   * Renders Final Results Screen for 15-Question Quizzes.
+   * Integrates Main Round Score + Reverse Round Points = Updated Final Total.
    */
   function renderQuizResults() {
+    finishRemoteGameSession();
     const quizDeck = PANITIKARD_DECKS[quizState.activeQuizId];
     const title = quizDeck ? quizDeck.title : "Pagsusulit";
 
-    const totalScore = quizState.currentScore;
+    const mainRoundScore = quizState.currentScore;
+    const reverseRoundPoints = reverseState.pointsEarned || 0;
+    const finalTotalScore = mainRoundScore + reverseRoundPoints;
     const maxScore = quizState.maxScore;
-    const correctCount = Object.values(quizState.userAnswers).filter(a => a.isCorrect).length;
-    const incorrectCount = quizState.questions.length - correctCount;
-    const percentage = Math.round((totalScore / maxScore) * 100);
+    const mainCorrectCount = Object.values(quizState.userAnswers).filter(a => a.isCorrect).length;
+    const incorrectCount = quizState.questions.length - mainCorrectCount;
+    const percentage = Math.min(100, Math.round((finalTotalScore / maxScore) * 100));
 
-    // Student Greeting
     if (resultStudentGreeting) {
       resultStudentGreeting.textContent = `Binabati kita, ${appState.studentName || "Mag-aaral"}! Natapos mo ang ${quizState.questions.length} na katanungan sa ${title}.`;
     }
 
-    if (resultScoreNum) resultScoreNum.textContent = String(totalScore);
+    if (resultScoreNum) resultScoreNum.textContent = String(finalTotalScore);
     if (resultScoreMax) resultScoreMax.textContent = String(maxScore);
     if (resultPercentageBadge) resultPercentageBadge.textContent = `${percentage}% Marka`;
     if (resultDeckBadge) resultDeckBadge.textContent = `Paksa: ${title}`;
 
-    if (resultCorrectCount) resultCorrectCount.textContent = String(correctCount);
+    if (resultCorrectCount) resultCorrectCount.textContent = String(mainCorrectCount);
     if (resultIncorrectCount) resultIncorrectCount.textContent = String(incorrectCount);
+
+    // Score Breakdown Strip
+    if (resultMainRoundPts) resultMainRoundPts.textContent = String(mainRoundScore);
+    if (resultReversePts) resultReversePts.textContent = reverseRoundPoints > 0 ? `+${reverseRoundPoints}` : "+0";
+    if (resultFinalTotalPts) resultFinalTotalPts.textContent = String(finalTotalScore);
+
+    // Reverse Stat Pill
+    if (resultStatReversePill) {
+      const correctedCount = Object.values(reverseState.answers).filter(a => a.isCorrect).length;
+      if (appState.reverseRoundCompleted && Object.keys(reverseState.answers).length > 0) {
+        resultStatReversePill.classList.remove("hidden");
+        if (resultReverseCount) resultReverseCount.textContent = String(correctedCount);
+      } else {
+        resultStatReversePill.classList.add("hidden");
+      }
+    }
 
     // Qualitative Performance Assessment
     if (resultPerformanceTitle && resultPerformanceMsg) {
@@ -1769,7 +2560,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Update review section headings
     if (resultReviewHeading) {
       resultReviewHeading.textContent = `📋 Detalyadong Pagsusuri ng bawat Tanong (${quizState.questions.length} Tanong)`;
     }
@@ -1793,8 +2583,8 @@ document.addEventListener("DOMContentLoaded", () => {
         const itemCard = document.createElement("div");
         itemCard.className = `result-item-card ${record.isCorrect ? "result-item-correct" : "result-item-incorrect"}`;
 
-        const pointsBadgeText = record.isCorrect 
-          ? `+${record.pointsEarned}/${q.points || 1} pt` 
+        const pointsBadgeText = record.isCorrect
+          ? `+${record.pointsEarned}/${q.points || 1} pt`
           : `0/${q.points || 1} pt`;
 
         itemCard.innerHTML = `
@@ -1824,9 +2614,104 @@ document.addEventListener("DOMContentLoaded", () => {
 
         resultBreakdownList.appendChild(itemCard);
       });
+
+      // Append Reverse Round Second-Chance Section if played
+      if (appState.reverseRoundCompleted && Object.keys(reverseState.answers).length > 0) {
+        appendReverseRoundReviews();
+      }
     }
 
     appState.lastPlayedMode = "quiz";
     navigateToScreen(screens.result);
+  }
+
+  /**
+   * Appends a dedicated Reverse Round section to the breakdown review list.
+   * Preserves all original answers while clearly showing second-chance attempts.
+   */
+  function appendReverseRoundReviews() {
+    const divider = document.createElement("div");
+    divider.className = "reverse-review-divider-box";
+    divider.innerHTML = `
+      <div class="reverse-divider-head">
+        <span class="reverse-divider-icon" aria-hidden="true">🔁</span>
+        <h4 class="reverse-divider-title">Resulta ng Reverse Round (Ikalawang Pagkakataon)</h4>
+      </div>
+      <p class="reverse-divider-sub">
+        Ipinapakita sa ibaba ang iyong mga ikalawang pagsubok. Ang iyong orihinal na rekord sa itaas ay nananatiling buo.
+      </p>
+    `;
+    resultBreakdownList.appendChild(divider);
+
+    Object.values(reverseState.answers).forEach((revAns, revIdx) => {
+      const itemCard = document.createElement("div");
+      itemCard.className = `result-item-card reverse-review-item ${revAns.isCorrect ? "result-item-correct" : "result-item-incorrect"}`;
+
+      itemCard.innerHTML = `
+        <div class="result-item-top">
+          <span class="result-item-title">
+            <span>🔁 Reverse Pagsubok #${revIdx + 1} (${escapeHtml(revAns.category || "Tanong")})</span>
+            <span class="pill-chip reverse-pill-chip">Ikalawang Pagkakataon</span>
+          </span>
+          <span class="result-item-points ${revAns.isCorrect ? "points-correct" : "points-missed"}">
+            ${revAns.isCorrect ? `+${revAns.pointsEarned} pt (Naitama!)` : "0 pt (Hindi Naitama)"}
+          </span>
+        </div>
+
+        <p class="result-item-prompt">${escapeHtml(revAns.question)}</p>
+
+        <div class="result-answers-comparison">
+          <div class="student-ans-line">
+            <strong>👤 Iyong Sagot sa Reverse:</strong> ${escapeHtml(revAns.userAnswer)}
+          </div>
+          <div class="correct-ans-line">
+            <strong>✓ Tamang Sagot:</strong> ${escapeHtml(revAns.correctAnswer)}
+          </div>
+        </div>
+
+        <div class="result-item-explanation">
+          <strong>📚 Paliwanag:</strong> ${escapeHtml(revAns.explanation)}
+        </div>
+      `;
+
+      resultBreakdownList.appendChild(itemCard);
+    });
+  }
+
+  function escapeHtml(text) {
+    if (!text) return "";
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  // ------------------------------------------------------------------------
+  // 18. Results Action Buttons (Retry, Return to Decks, Home)
+  // ------------------------------------------------------------------------
+  if (btnRetryDeck) {
+    btnRetryDeck.addEventListener("click", () => {
+      if (appState.lastPlayedMode === "quiz") {
+        startQuiz(quizState.activeQuizId);
+      } else {
+        startDeckSession();
+      }
+    });
+  }
+
+  if (btnResultToDecks) {
+    btnResultToDecks.addEventListener("click", () => {
+      stopChallengeTimer();
+      navigateToScreen(screens.deck);
+    });
+  }
+
+  if (btnResultToHome) {
+    btnResultToHome.addEventListener("click", () => {
+      stopChallengeTimer();
+      navigateToScreen(screens.welcome);
+    });
   }
 });

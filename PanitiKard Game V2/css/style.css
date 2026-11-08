@@ -35,6 +35,13 @@
   --color-type-help: #0891b2;
   --color-type-challenge: #dc2626;
 
+  /* Purple & Lavender Palette for Primary Gameplay Actions */
+  --color-action-purple: #5030dc;
+  --color-action-purple-hover: #4122c4;
+  --color-action-lavender-bg: #f4f2fc;
+  --color-action-lavender-border: #dcd7fa;
+  --color-action-lavender-text: #5030dc;
+
   /* Neutrals & Surfaces */
   --color-bg: #f8f6f0;
   --color-surface: #ffffff;
@@ -296,6 +303,11 @@ body {
   font-size: 0.75rem;
   color: #55706c;
 }
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--color-text-muted);
@@ -1026,73 +1038,163 @@ body {
   font-size: 0.85rem;
 }
 
-/* 7 Card Types Navigation Switcher Tabs (With Scroll Edge Fade) */
-.card-type-switcher-container {
-  margin-bottom: var(--space-sm);
+/* ==========================================================================
+   8. SINGLE ACTIVE CATEGORY HEADER (Displays ONLY the Active Category)
+   ========================================================================== */
+.single-category-header-wrap {
+  max-width: 540px;
+  margin: 0 auto var(--space-sm);
   position: relative;
+  width: 100%;
+}
+
+.single-category-header-banner {
+  background-color: #ffffff;
+  border-radius: 16px;
+  padding: 10px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+  border: 2px solid var(--color-border);
+  transition: all 0.3s ease;
+}
+
+/* Category Accent Variants for Single Active Header */
+.single-category-header-banner.theme-green {
+  border-color: #86efac;
+  background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+}
+.single-category-header-banner.theme-green .single-category-icon {
+  background-color: #f0fdf4;
+  border-color: #86efac;
+  color: #16a34a;
+}
+.single-category-header-banner.theme-green .single-category-title {
+  color: #15803d;
+}
+
+.single-category-header-banner.theme-blue {
+  border-color: #93c5fd;
+  background: linear-gradient(135deg, #ffffff 0%, #eff6ff 100%);
+}
+.single-category-header-banner.theme-blue .single-category-icon {
+  background-color: #eff6ff;
+  border-color: #93c5fd;
+  color: #2563eb;
+}
+.single-category-header-banner.theme-blue .single-category-title {
+  color: #1d4ed8;
+}
+
+.single-category-header-banner.theme-yellow {
+  border-color: #fcd34d;
+  background: linear-gradient(135deg, #ffffff 0%, #fffbeb 100%);
+}
+.single-category-header-banner.theme-yellow .single-category-icon {
+  background-color: #fffbeb;
+  border-color: #fcd34d;
+  color: #d97706;
+}
+.single-category-header-banner.theme-yellow .single-category-title {
+  color: #b45309;
+}
+
+.single-category-header-banner.theme-red {
+  border-color: #fca5a5;
+  background: linear-gradient(135deg, #ffffff 0%, #fef2f2 100%);
+}
+.single-category-header-banner.theme-red .single-category-icon {
+  background-color: #fef2f2;
+  border-color: #fca5a5;
+  color: #dc2626;
+}
+.single-category-header-banner.theme-red .single-category-title {
+  color: #b91c1c;
+}
+
+.single-category-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.single-category-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  font-size: 1.45rem;
+  border: 1.5px solid var(--color-border);
+  background-color: var(--color-surface-subtle);
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.single-category-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.single-category-kicker {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+
+.single-category-title {
+  font-family: var(--font-family-display);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--color-text-main);
+  line-height: 1.2;
+}
+
+.single-category-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.single-category-desc {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-align: right;
+}
+
+.single-category-step-pill {
+  font-size: 0.725rem;
+  font-weight: 800;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-main);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+/* Inactive tabs are strictly hidden to ensure ONLY the active category is displayed */
+.sr-tabs,
+.card-type-tabs .type-tab:not(.active) {
+  display: none !important;
 }
 
 .card-type-tabs {
-  display: flex;
-  gap: 5px;
-  padding: 4px;
-  background-color: var(--color-surface-subtle);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  overflow-x: auto;
-  scrollbar-width: thin;
+  display: none;
 }
 
 .type-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: inherit;
-  font-size: 0.75rem;
-  font-weight: 700;
-  padding: 5px 9px;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  background-color: transparent;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  white-space: nowrap;
-  flex-shrink: 0;
+  display: none;
 }
 
-.type-tab:hover {
-  background-color: var(--color-surface);
-  color: var(--color-text-main);
-  border-color: var(--color-border);
-}
-
-.type-tab.active {
-  background-color: var(--color-surface);
-  color: var(--color-text-main);
-  box-shadow: var(--shadow-sm);
-  border-color: var(--color-border);
-}
-
-.tab-label-group {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.1;
-  text-align: left;
-}
-
-.tab-main-text {
-  font-weight: 800;
-  font-size: 0.75rem;
-}
-
-.tab-sub-text {
-  font-size: 0.625rem;
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-}
-
-/* Tab Active Color Border */
+/* Tab active classes preserved for DOM/test compatibility */
 .type-tab[data-type="question"].active { border-color: var(--color-type-question); color: var(--color-type-question); }
 .type-tab[data-type="statement"].active { border-color: var(--color-type-statement); color: var(--color-type-statement); }
 .type-tab[data-type="correction"].active { border-color: var(--color-type-correction); color: var(--color-type-correction); }
@@ -1120,17 +1222,19 @@ body {
 .playing-card {
   position: relative;
   width: 100%;
-  min-height: clamp(470px, 58vh, 530px);
+  max-width: 480px;
+  min-height: clamp(480px, 60vh, 550px);
   transform-style: preserve-3d;
-  transition: transform 0.7s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: transform 450ms cubic-bezier(0.4, 0.0, 0.2, 1);
   cursor: pointer;
   user-select: none;
   outline: none;
+  margin: 0 auto;
 }
 
 .playing-card:focus-visible {
   outline: 3px solid var(--color-accent-gold);
-  border-radius: var(--radius-lg);
+  border-radius: 24px;
 }
 
 .playing-card.is-flipped {
@@ -1145,22 +1249,21 @@ body {
   height: 100%;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  border-radius: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.16);
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
 
 .card-front {
-  background: radial-gradient(circle at 50% 10%, #ffffff 0%, #faf8f5 100%);
-  border: 7px solid var(--card-border-color, #185b55);
+  transform: rotateY(0deg);
+  z-index: 2;
 }
 
 .card-back {
-  background: radial-gradient(circle at 50% 10%, #ffffff 0%, #f4f7f5 100%);
-  border: 7px solid var(--card-border-color, #185b55);
   transform: rotateY(180deg);
+  z-index: 1;
 }
 
 /* Inner Frame */
@@ -1729,41 +1832,113 @@ body {
 .card-toolbar-pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   background-color: var(--color-surface);
   border: 2px solid var(--color-border);
-  padding: 4px;
+  padding: 6px 8px;
   border-radius: var(--radius-full);
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 }
 
 .toolbar-btn {
   font-family: inherit;
   font-size: 0.85rem;
   font-weight: 700;
-  padding: 6px 14px;
+  padding: 8px 16px;
   border-radius: var(--radius-full);
   border: none;
   background-color: var(--color-surface-subtle);
   color: var(--color-text-main);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .toolbar-btn:hover {
   background-color: var(--color-border);
 }
 
-.btn-flip-accent {
-  background-color: var(--color-primary);
-  color: var(--color-text-inverse);
-  padding: 7px 18px;
-  box-shadow: 0 2px 6px rgba(24, 91, 85, 0.25);
+/* Secondary Action: Nakaraan (Soft Lavender) */
+.toolbar-btn.btn-prev-nav {
+  background-color: var(--color-action-lavender-bg);
+  color: var(--color-action-purple);
+  border: 1.5px solid var(--color-action-lavender-border);
+  font-weight: 700;
 }
 
-.btn-flip-accent:hover {
-  background-color: var(--color-primary-hover);
-  color: var(--color-text-inverse);
+.toolbar-btn.btn-prev-nav:hover:not(:disabled) {
+  background-color: #ebe7f9;
+  color: var(--color-action-purple-hover);
+  border-color: var(--color-action-purple);
+  transform: translateY(-1px);
+}
+
+/* Visually Prominent Flip Card Button (Elevated Gold & Emerald) */
+.btn-flip-prominent,
+.btn-flip-accent {
+  background: linear-gradient(135deg, #185b55 0%, #14351c 100%) !important;
+  color: #ffffff !important;
+  border: 2px solid #d4af37 !important;
+  font-weight: 800 !important;
+  padding: 8px 20px !important;
+  box-shadow: 0 4px 14px rgba(20, 53, 28, 0.32) !important;
+  letter-spacing: 0.02em;
+}
+
+.btn-flip-prominent:hover:not(:disabled),
+.btn-flip-accent:hover:not(:disabled) {
+  background: linear-gradient(135deg, #1e7069 0%, #1b4332 100%) !important;
+  border-color: #f5d77f !important;
+  box-shadow: 0 6px 18px rgba(20, 53, 28, 0.45) !important;
+  transform: translateY(-2px);
+}
+
+/* Primary Action: Susunod & Submit in Purple/Lavender Palette */
+.toolbar-btn.btn-next-nav,
+.btn-action-purple,
+.btn-quiz-submit,
+.btn-quiz-next,
+.btn-reverse-submit,
+.btn-reverse-next,
+.btn-submit-choice {
+  background-color: var(--color-action-purple) !important;
+  color: #ffffff !important;
+  border: none !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 14px rgba(80, 48, 220, 0.28) !important;
+  transition: all 0.2s ease;
+}
+
+.toolbar-btn.btn-next-nav:hover:not(:disabled),
+.btn-action-purple:hover:not(:disabled),
+.btn-quiz-submit:hover:not(:disabled),
+.btn-quiz-next:hover:not(:disabled),
+.btn-reverse-submit:hover:not(:disabled),
+.btn-reverse-next:hover:not(:disabled),
+.btn-submit-choice:hover:not(:disabled) {
+  background-color: var(--color-action-purple-hover) !important;
+  box-shadow: 0 6px 18px rgba(80, 48, 220, 0.38) !important;
+  transform: translateY(-2px);
+}
+
+/* Secondary Action: Pumili ng Ibang Topic Deck */
+.btn-deck-return {
+  background-color: transparent !important;
+  color: var(--color-text-muted) !important;
+  border: 1.5px solid var(--color-border) !important;
+  padding: 8px 20px !important;
+  border-radius: var(--radius-full) !important;
+  font-weight: 600 !important;
+  transition: all 0.15s ease;
+}
+
+.btn-deck-return:hover {
+  background-color: #ffffff !important;
+  color: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+  transform: translateY(-1px);
 }
 
 .btn-compact {
@@ -2313,7 +2488,6 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  outline: none;
 }
 
 .topic-card:hover {
@@ -2927,3 +3101,1197 @@ body {
   }
 }
 
+/* ==========================================================================
+   PART 1: UNO-INSPIRED CARD FRONT DESIGN (4 DISTINCT CATEGORY COLORS)
+   ========================================================================== */
+
+/* ==========================================================================
+   PART 1: MINIMALIST PLAYING CARD FRONT DESIGN (4 DISTINCT CATEGORY COLORS)
+   ========================================================================== */
+
+/* Playing Card Front Base (Clean Cream/White Surface, Rounded Corners, Subtle Shadows) */
+.uno-card-front {
+  padding: 8px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background-color: #ffffff;
+  border-radius: 24px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08), 0 2px 6px rgba(0, 0, 0, 0.04);
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.uno-card-frame {
+  flex: 1;
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+  padding: 10px 12px;
+  background-color: #ffffff;
+  transition: border-color 0.3s ease;
+}
+
+/* Category Color 1: RED – Challenge Cards */
+.card-theme-red .uno-card-front,
+.playing-card.theme-type-challenge .uno-card-front,
+.playing-card.card-theme-red .uno-card-front {
+  background-color: #ffffff;
+  border: 3.5px solid #dc2626;
+  box-shadow: 0 10px 28px rgba(220, 38, 38, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.card-theme-red .uno-face-header .card-type-pill,
+.playing-card.theme-type-challenge .uno-face-header .card-type-pill {
+  background-color: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
+}
+
+.card-theme-red .uno-corner-pip,
+.playing-card.theme-type-challenge .uno-corner-pip {
+  background-color: #fef2f2;
+  border: 1.5px solid #fca5a5;
+  color: #dc2626;
+}
+.card-theme-red .uno-corner-pip .uno-pip-num,
+.playing-card.theme-type-challenge .uno-corner-pip .uno-pip-num {
+  color: #dc2626;
+}
+.card-theme-red .card-hero-icon,
+.playing-card.theme-type-challenge .card-hero-icon {
+  background-color: #fef2f2;
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+/* Category Color 2: YELLOW – Bonus Cards */
+.card-theme-yellow .uno-card-front,
+.playing-card.theme-type-bonus .uno-card-front,
+.playing-card.card-theme-yellow .uno-card-front {
+  background-color: #ffffff;
+  border: 3.5px solid #d97706;
+  box-shadow: 0 10px 28px rgba(217, 119, 6, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.card-theme-yellow .uno-face-header .card-type-pill,
+.playing-card.theme-type-bonus .uno-face-header .card-type-pill {
+  background-color: #d97706;
+  color: #ffffff;
+  border-color: #d97706;
+}
+
+.card-theme-yellow .uno-corner-pip,
+.playing-card.theme-type-bonus .uno-corner-pip {
+  background-color: #fffbeb;
+  border: 1.5px solid #fcd34d;
+  color: #d97706;
+}
+.card-theme-yellow .uno-corner-pip .uno-pip-num,
+.playing-card.theme-type-bonus .uno-corner-pip .uno-pip-num {
+  color: #d97706;
+}
+.card-theme-yellow .card-hero-icon,
+.playing-card.theme-type-bonus .card-hero-icon {
+  background-color: #fffbeb;
+  border-color: #d97706;
+  color: #d97706;
+}
+
+/* Category Color 3: BLUE – Analysis Cards (Statement & Correction) */
+.card-theme-blue .uno-card-front,
+.playing-card.theme-type-statement .uno-card-front,
+.playing-card.theme-type-correction .uno-card-front,
+.playing-card.card-theme-blue .uno-card-front {
+  background-color: #ffffff;
+  border: 3.5px solid #2563eb;
+  box-shadow: 0 10px 28px rgba(37, 99, 235, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.card-theme-blue .uno-face-header .card-type-pill,
+.playing-card.theme-type-statement .uno-face-header .card-type-pill,
+.playing-card.theme-type-correction .uno-face-header .card-type-pill {
+  background-color: #2563eb;
+  color: #ffffff;
+  border-color: #2563eb;
+}
+
+.card-theme-blue .uno-corner-pip,
+.playing-card.theme-type-statement .uno-corner-pip,
+.playing-card.theme-type-correction .uno-corner-pip {
+  background-color: #eff6ff;
+  border: 1.5px solid #93c5fd;
+  color: #2563eb;
+}
+.card-theme-blue .uno-corner-pip .uno-pip-num,
+.playing-card.theme-type-statement .uno-corner-pip .uno-pip-num,
+.playing-card.theme-type-correction .uno-corner-pip .uno-pip-num {
+  color: #2563eb;
+}
+.card-theme-blue .card-hero-icon,
+.playing-card.theme-type-statement .card-hero-icon,
+.playing-card.theme-type-correction .card-hero-icon {
+  background-color: #eff6ff;
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+/* Category Color 4: GREEN – Knowledge & Definition Cards (Question, Help, Reverse Review) */
+.card-theme-green .uno-card-front,
+.playing-card.theme-type-question .uno-card-front,
+.playing-card.theme-type-help .uno-card-front,
+.playing-card.theme-type-reverse .uno-card-front,
+.playing-card.card-theme-green .uno-card-front {
+  background-color: #ffffff;
+  border: 3.5px solid #16a34a;
+  box-shadow: 0 10px 28px rgba(22, 163, 74, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.card-theme-green .uno-face-header .card-type-pill,
+.playing-card.theme-type-question .uno-face-header .card-type-pill,
+.playing-card.theme-type-help .uno-face-header .card-type-pill,
+.playing-card.theme-type-reverse .uno-face-header .card-type-pill {
+  background-color: #16a34a;
+  color: #ffffff;
+  border-color: #16a34a;
+}
+
+.card-theme-green .uno-corner-pip,
+.playing-card.theme-type-question .uno-corner-pip,
+.playing-card.theme-type-help .uno-corner-pip,
+.playing-card.theme-type-reverse .uno-corner-pip {
+  background-color: #f0fdf4;
+  border: 1.5px solid #86efac;
+  color: #16a34a;
+}
+.card-theme-green .uno-corner-pip .uno-pip-num,
+.playing-card.theme-type-question .uno-corner-pip .uno-pip-num,
+.playing-card.theme-type-help .uno-corner-pip .uno-pip-num,
+.playing-card.theme-type-reverse .uno-corner-pip .uno-pip-num {
+  color: #16a34a;
+}
+.card-theme-green .card-hero-icon,
+.playing-card.theme-type-question .card-hero-icon,
+.playing-card.theme-type-help .card-hero-icon,
+.playing-card.theme-type-reverse .card-hero-icon {
+  background-color: #f0fdf4;
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
+/* SPECIAL RED REVERSE CARD (Reverse Round) */
+.card-theme-reverse .uno-card-front,
+.playing-card.card-theme-reverse .uno-card-front {
+  background-color: #ffffff;
+  border: 3.5px solid #dc2626;
+  box-shadow: 0 10px 28px rgba(220, 38, 38, 0.16), 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.card-theme-reverse .uno-face-header .card-type-pill,
+.playing-card.card-theme-reverse .uno-face-header .card-type-pill {
+  background-color: #dc2626;
+  color: #ffffff;
+  border-color: #dc2626;
+}
+
+.card-theme-reverse .uno-corner-pip,
+.playing-card.card-theme-reverse .uno-corner-pip {
+  background-color: #fef2f2;
+  border: 1.5px solid #fca5a5;
+  color: #dc2626;
+}
+.card-theme-reverse .uno-corner-pip .uno-pip-num,
+.playing-card.card-theme-reverse .uno-corner-pip .uno-pip-num {
+  color: #dc2626;
+}
+.card-theme-reverse .card-hero-icon,
+.playing-card.card-theme-reverse .card-hero-icon,
+.playing-card.card-theme-reverse .reverse-hero-symbol {
+  background-color: #fef2f2;
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+/* Corner Pips: Minimalist Clean Number & Icon */
+.uno-corner-pip {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  pointer-events: none;
+  line-height: 1;
+  border-radius: 8px;
+  padding: 3px 6px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.uno-corner-pip.corner-top-left {
+  top: 10px;
+  left: 10px;
+}
+
+.uno-corner-pip.corner-bottom-right {
+  bottom: 10px;
+  right: 10px;
+  transform: rotate(180deg);
+}
+
+.uno-pip-num {
+  font-family: var(--font-family-base);
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.uno-pip-icon {
+  font-size: 0.85rem;
+  margin-top: 1px;
+}
+
+.uno-pip-reverse {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+/* Minimalist Face Header & Footer Bars */
+.uno-face-header {
+  padding-left: 48px;
+  padding-right: 8px;
+  margin-bottom: 6px;
+  z-index: 8;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.uno-face-footer {
+  padding-left: 8px;
+  padding-right: 48px;
+  margin-top: 6px;
+  z-index: 8;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+/* Minimalist Central Card Surface */
+.uno-card-center-oval {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin: 2px 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  z-index: 5;
+  position: relative;
+}
+
+/* ==========================================================================
+   PART 2: ONE UNIFORM CARD-BACK DESIGN (IDENTICAL ACROSS ALL CARDS)
+   ========================================================================== */
+
+.uniform-card-back {
+  background: linear-gradient(145deg, #184221 0%, #0d2813 100%) !important;
+  border: 7px solid #ffffff !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 8px !important;
+  position: relative !important;
+  user-select: none;
+}
+
+.card-back-outer-border {
+  flex: 1;
+  border: 3px solid #d4af37;
+  border-radius: 16px;
+  padding: 6px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background-color: #14351c;
+  overflow: hidden;
+}
+
+/* Subtle Playing-Card Lattice & Filigree Pattern */
+.card-back-pattern {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(rgba(212, 175, 55, 0.22) 1.5px, transparent 1.5px),
+    linear-gradient(45deg, rgba(212, 175, 55, 0.05) 25%, transparent 25%, transparent 75%, rgba(212, 175, 55, 0.05) 75%),
+    linear-gradient(45deg, rgba(212, 175, 55, 0.05) 25%, transparent 25%, transparent 75%, rgba(212, 175, 55, 0.05) 75%);
+  background-size: 16px 16px, 24px 24px, 24px 24px;
+  background-position: 0 0, 0 0, 12px 12px;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.card-back-inner-frame {
+  flex: 1;
+  border: 1.5px solid rgba(212, 175, 55, 0.7);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  padding: 16px 12px;
+}
+
+.card-back-corner {
+  position: absolute;
+  font-size: 1.15rem;
+  color: #d4af37;
+  line-height: 1;
+  text-shadow: 0 0 4px rgba(212, 175, 55, 0.6);
+  pointer-events: none;
+}
+.card-back-corner.corner-tl { top: 8px; left: 10px; }
+.card-back-corner.corner-tr { top: 8px; right: 10px; }
+.card-back-corner.corner-bl { bottom: 8px; left: 10px; }
+.card-back-corner.corner-br { bottom: 8px; right: 10px; }
+
+.card-back-centerpiece {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.card-back-emblem {
+  width: 78px;
+  height: 78px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.open-book-svg {
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.55));
+}
+
+.card-back-brand {
+  font-family: 'Pacifico', cursive;
+  font-size: 2.3rem;
+  color: #f5ebcb;
+  margin: 0;
+  line-height: 1.2;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6), 0 0 12px rgba(212, 175, 55, 0.4);
+}
+
+.card-back-tagline {
+  font-family: var(--font-family-sans);
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: #d4af37;
+  letter-spacing: 2.5px;
+  margin-top: 6px;
+  text-transform: uppercase;
+}
+
+.card-back-flip-pill {
+  position: relative;
+  z-index: 3;
+  margin-top: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(212, 175, 55, 0.4);
+  color: #f5ebcb;
+  font-size: 0.75rem;
+  font-weight: 700;
+  align-self: center;
+  pointer-events: none;
+}
+
+/* ==========================================================================
+   FORMATIVE FEEDBACK PANEL (BELOW THE 3D CARD)
+   ========================================================================== */
+
+.card-feedback-panel {
+  max-width: 480px;
+  margin: 18px auto 0 auto;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 2px solid;
+  animation: fadeInFeedback 0.3s ease;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  background-color: #ffffff;
+}
+
+.card-feedback-panel.correct {
+  border-color: #16a34a;
+  background-color: #f0fdf4;
+}
+
+.card-feedback-panel.incorrect {
+  border-color: #dc2626;
+  background-color: #fef2f2;
+}
+
+.card-feedback-head {
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.card-feedback-head.feedback-correct {
+  background-color: #16a34a;
+}
+
+.card-feedback-head.feedback-incorrect {
+  background-color: #dc2626;
+}
+
+.card-feedback-body {
+  padding: 14px 18px;
+  font-size: 0.925rem;
+}
+
+.feedback-trivia-wrap {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(0, 0, 0, 0.1);
+}
+
+.feedback-trivia-text {
+  margin: 4px 0 0 0;
+  color: #4b5563;
+  font-size: 0.88rem;
+  font-style: italic;
+}
+
+.feedback-terms-box {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background-color: #fffbeb;
+  border-radius: 8px;
+  border: 1px solid #fef3c7;
+}
+
+.feedback-terms-text {
+  margin: 4px 0 0 0;
+  color: #b45309;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+/* ==========================================================================
+   PART 4 & 5: REVERSE ROUND SCREENS & SPECIAL RED REVERSE CARD
+   ========================================================================== */
+
+/* Screen 3.7: Reverse Round Intro Screen */
+.reverse-intro-card {
+  max-width: 680px;
+  margin: 0 auto;
+  background: #ffffff;
+  border-radius: 24px;
+  padding: 32px 28px;
+  box-shadow: 0 10px 35px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  text-align: center;
+}
+
+.reverse-hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  margin-bottom: 16px;
+}
+
+.reverse-intro-heading {
+  font-family: var(--font-family-display);
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #193822;
+  margin: 0 0 12px 0;
+  line-height: 1.25;
+}
+
+.reverse-intro-desc {
+  font-size: 1rem;
+  color: #374151;
+  line-height: 1.55;
+  margin-bottom: 22px;
+}
+
+.reverse-rules-panel {
+  background: #fdfaf6;
+  border: 2px dashed #f59e0b;
+  border-radius: 16px;
+  padding: 18px 20px;
+  text-align: left;
+  margin-bottom: 22px;
+}
+
+.reverse-rules-title {
+  font-family: var(--font-family-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #92400e;
+  margin: 0 0 10px 0;
+}
+
+.reverse-rules-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 0.9rem;
+  color: #4b5563;
+  line-height: 1.6;
+}
+
+.reverse-rules-list li {
+  margin-bottom: 6px;
+}
+
+.reverse-status-highlight {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #fef2f2;
+  border: 2px solid #ef4444;
+  border-radius: 14px;
+  padding: 14px 20px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.highlight-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #991b1b;
+}
+
+.highlight-count {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: #b91c1c;
+  line-height: 1;
+}
+
+.highlight-sub {
+  font-size: 0.85rem;
+  color: #7f1d1d;
+  font-weight: 600;
+}
+
+.reverse-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.btn-reverse-start {
+  background: linear-gradient(135deg, #e11d48, #be123c) !important;
+  box-shadow: 0 4px 14px rgba(225, 29, 72, 0.4) !important;
+}
+
+/* Screen 3.8: Reverse Round Gameplay Screen */
+.reverse-arena-card {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.reverse-header-bar {
+  margin-bottom: 20px;
+}
+
+.reverse-header-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.reverse-badge-pill {
+  background: #e11d48;
+  color: #ffffff;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-weight: 800;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reverse-counter-pill {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reverse-score-badge {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reverse-progress-strip {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.reverse-attempt-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.attempt-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  border: 2px solid #d1d5db;
+  transition: all 0.25s ease;
+}
+
+.attempt-dot.active {
+  background: #ef4444;
+  border-color: #b91c1c;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+}
+
+.reverse-hero-symbol {
+  font-size: 2.2rem;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.reverse-card-header .card-type-pill {
+  background-color: #9f1239;
+  color: #ffffff;
+}
+
+.reverse-action-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin-top: 14px;
+  width: min(100%, 480px);
+  max-width: 100%;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.btn-reverse-submit {
+  flex: 1;
+  background: linear-gradient(135deg, #e11d48, #be123c) !important;
+}
+
+/* Results Screen Score Breakdown Strip */
+.result-score-breakdown-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0 12px 0;
+}
+
+.score-mini-pill {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  padding: 5px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.reverse-mini-pill {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.total-mini-pill {
+  background: #e6f7ec;
+  border-color: #bbf0c8;
+  color: #166534;
+}
+
+.stat-pill-reverse {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+  border: 1px solid #fca5a5 !important;
+}
+
+/* Reverse Round Breakdown Reviews in Result Screen */
+.reverse-review-divider-box {
+  margin-top: var(--space-md);
+  margin-bottom: var(--space-sm);
+  padding: 14px 18px;
+  background: linear-gradient(135deg, #fff5f5 0%, #fef2f2 100%);
+  border: 2px dashed #f87171;
+  border-radius: 14px;
+}
+
+.reverse-divider-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reverse-divider-icon {
+  font-size: 1.3rem;
+}
+
+.reverse-divider-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #991b1b;
+}
+
+.reverse-divider-sub {
+  margin: 4px 0 0 0;
+  font-size: 0.85rem;
+  color: #7f1d1d;
+  line-height: 1.4;
+}
+
+.reverse-review-item {
+  border-left: 5px solid #dc2626 !important;
+  background: #fffdfd;
+}
+
+.reverse-pill-chip {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+  border-color: #fca5a5 !important;
+}
+
+/* ==========================================================================
+   ADDITIONAL PART: TOPIC SELECTION CARDS PLAYING-CARD AESTHETIC ENHANCEMENT
+   ========================================================================== */
+
+.topic-card {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.25s ease !important;
+}
+
+.topic-card::after {
+  content: "♦";
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.9);
+  z-index: 5;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+}
+
+.topic-card:hover {
+  transform: translateY(-6px) scale(1.015) !important;
+  box-shadow: 0 14px 30px rgba(41, 70, 41, 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
+}
+
+/* --------------------------------------------------------------------------
+   Gameplay refresh: cream canvas, green controls, and a single physical card
+   -------------------------------------------------------------------------- */
+#card-screen,
+#quiz-screen,
+#reverse-screen,
+#reverse-intro-screen,
+#result-screen {
+  --color-action-purple: #176b3a;
+  --color-action-purple-hover: #11552e;
+  --color-action-lavender-bg: #e8f5e9;
+  --color-action-lavender-border: #86efac;
+  --color-action-lavender-text: #176b3a;
+}
+
+#card-screen .card-arena-card,
+#reverse-screen .reverse-arena-card {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+#card-screen .card-arena-title { color: #193822; }
+#card-screen .card-arena-sub { color: #4d6655; }
+
+#card-screen .single-category-header-banner {
+  color: #193822;
+  background: #e8f5e9 !important;
+  border: 2px solid #22c55e !important;
+  box-shadow: 0 4px 14px rgba(25, 56, 34, 0.08);
+}
+
+#card-screen .single-category-icon {
+  background: #f0fdf4 !important;
+  border-color: #86efac !important;
+  color: #176b3a !important;
+}
+
+#card-screen .single-category-title { color: #176b3a !important; }
+
+#card-screen .toolbar-btn.btn-prev-nav {
+  color: #176b3a;
+  background: #e8f5e9;
+  border-color: #86efac;
+}
+
+#card-screen .toolbar-btn.btn-next-nav,
+#card-screen .btn-action-purple,
+#card-screen .btn-submit-choice,
+#quiz-screen .btn-action-purple,
+#reverse-screen .btn-action-purple,
+#reverse-intro-screen .btn-action-purple {
+  background: #176b3a !important;
+  box-shadow: 0 4px 14px rgba(23, 107, 58, 0.22) !important;
+}
+
+#card-screen .toolbar-btn.btn-next-nav:hover:not(:disabled),
+#card-screen .btn-action-purple:hover:not(:disabled),
+#card-screen .btn-submit-choice:hover:not(:disabled),
+#quiz-screen .btn-action-purple:hover:not(:disabled),
+#reverse-screen .btn-action-purple:hover:not(:disabled),
+#reverse-intro-screen .btn-action-purple:hover:not(:disabled) {
+  background: #11552e !important;
+}
+
+#card-screen .card-toolbar-pill {
+  background: #fffdf7;
+  border-color: #dce5d8;
+}
+
+#card-screen .card-stage { width: 100%; align-items: stretch; }
+#card-screen .card-perspective,
+#reverse-screen .card-perspective { width: min(100%, 480px); max-width: 480px; }
+
+#card-screen .playing-card,
+#reverse-screen .playing-card {
+  height: clamp(500px, 68vh, 590px);
+  min-height: 500px;
+  max-width: 480px;
+}
+
+#card-screen .card-face,
+#reverse-screen .card-face {
+  position: absolute !important;
+  inset: 0;
+  border: 5px solid #111;
+  border-radius: 22px;
+  box-shadow: 0 12px 30px rgba(24, 42, 27, 0.18);
+}
+
+#card-screen .uno-card-front {
+  padding: 8px;
+  border: 5px solid #111;
+  box-shadow: none;
+  background: var(--sequence-color, #f3d54a);
+}
+
+#card-screen .uno-card-frame {
+  margin: 0;
+  padding: 10px 12px;
+  border: 6px solid #fff;
+  border-radius: 14px;
+  background: #fff;
+}
+
+#reverse-screen .card-reverse-front {
+  padding: 8px;
+  border: 5px solid #111;
+  background: #c62828;
+}
+
+#reverse-screen .card-reverse-front .uno-card-frame {
+  border: 6px solid #fff;
+  background: #fff;
+}
+
+#card-screen .card-sequence-yellow { --sequence-color: #f3d54a; --sequence-ink: #9a6b00; }
+#card-screen .card-sequence-red { --sequence-color: #d9362b; --sequence-ink: #a51d18; }
+#card-screen .card-sequence-blue { --sequence-color: #2874c8; --sequence-ink: #164b87; }
+#card-screen .card-sequence-green { --sequence-color: #21834a; --sequence-ink: #14532d; }
+
+#card-screen .playing-card.card-sequence-yellow .uno-face-header .card-type-pill,
+#card-screen .playing-card.card-sequence-red .uno-face-header .card-type-pill,
+#card-screen .playing-card.card-sequence-blue .uno-face-header .card-type-pill,
+#card-screen .playing-card.card-sequence-green .uno-face-header .card-type-pill {
+  background: var(--sequence-color);
+  color: #fff;
+  border-color: var(--sequence-color);
+}
+
+#card-screen .playing-card.card-sequence-yellow .uno-corner-pip,
+#card-screen .playing-card.card-sequence-red .uno-corner-pip,
+#card-screen .playing-card.card-sequence-blue .uno-corner-pip,
+#card-screen .playing-card.card-sequence-green .uno-corner-pip {
+  background: color-mix(in srgb, var(--sequence-color) 12%, white);
+  border-color: var(--sequence-color);
+  color: var(--sequence-ink);
+}
+
+#card-screen .playing-card.card-sequence-yellow .uno-pip-num,
+#card-screen .playing-card.card-sequence-red .uno-pip-num,
+#card-screen .playing-card.card-sequence-blue .uno-pip-num,
+#card-screen .playing-card.card-sequence-green .uno-pip-num { color: var(--sequence-ink); }
+
+#card-screen .uniform-card-back,
+#reverse-screen .uniform-card-back {
+  background: #176b3a !important;
+  border-color: #111 !important;
+  padding: 9px !important;
+}
+
+#reverse-screen .uniform-card-back {
+  background: linear-gradient(145deg, #c62828, #851b1b) !important;
+}
+
+#card-screen .card-back-outer-border,
+#reverse-screen .card-back-outer-border {
+  border: 3px solid #d9f99d;
+  background: linear-gradient(145deg, #176b3a, #104b2b);
+}
+
+#reverse-screen .card-back-outer-border {
+  border-color: #fecaca;
+  background: linear-gradient(145deg, #b91c1c, #7f1d1d);
+}
+
+#card-screen .card-back-pattern,
+#reverse-screen .card-back-pattern {
+  opacity: 1;
+  background-image:
+    radial-gradient(ellipse at 0% 50%, transparent 55%, rgba(217, 249, 157, 0.35) 56%, transparent 58%),
+    radial-gradient(ellipse at 100% 50%, transparent 55%, rgba(255, 255, 255, 0.3) 56%, transparent 58%),
+    radial-gradient(rgba(255, 255, 255, 0.24) 1px, transparent 1.5px);
+  background-size: 130px 280px, 130px 280px, 18px 18px;
+  background-position: left center, right center, center;
+}
+
+#reverse-screen .card-back-pattern {
+  background-image:
+    radial-gradient(ellipse at 0% 50%, transparent 55%, rgba(254, 202, 202, 0.32) 56%, transparent 58%),
+    radial-gradient(ellipse at 100% 50%, transparent 55%, rgba(255, 255, 255, 0.28) 56%, transparent 58%),
+    radial-gradient(rgba(255, 255, 255, 0.22) 1px, transparent 1.5px);
+}
+
+#card-screen .card-back-inner-frame,
+#reverse-screen .card-back-inner-frame { border-color: rgba(217, 249, 157, 0.8); }
+
+#reverse-screen .card-back-inner-frame { border-color: rgba(254, 202, 202, 0.82); }
+
+#card-screen .card-back-brand,
+#reverse-screen .card-back-brand {
+  color: #fff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+#card-screen .card-back-tagline,
+#card-screen .card-back-corner,
+#reverse-screen .card-back-tagline,
+#reverse-screen .card-back-corner { color: #d9f99d; }
+
+#reverse-screen .card-back-tagline,
+#reverse-screen .card-back-corner { color: #fecaca; }
+
+#card-screen .open-book-svg path,
+#reverse-screen .open-book-svg path { stroke: #d9f99d; }
+
+#reverse-screen .open-book-svg path { fill: #7f1d1d; stroke: #fecaca; }
+
+#card-screen .card-back-inner-frame,
+#reverse-screen .card-back-inner-frame { min-height: 0; overflow: hidden; }
+
+#card-screen .card-feedback-panel,
+#reverse-screen .card-feedback-panel {
+  position: absolute;
+  inset: 12px;
+  z-index: 4;
+  max-width: none;
+  height: auto;
+  max-height: calc(100% - 24px);
+  margin: 0;
+  border: 2px solid #86efac;
+  border-radius: 12px;
+  overflow: auto;
+  background: #fffdf7;
+  color: #193822;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.2);
+}
+
+#card-screen .card-feedback-body,
+#reverse-screen .card-feedback-body { padding: 12px 14px; font-size: 0.82rem; }
+
+#card-screen .card-feedback-message,
+#card-screen .card-feedback-method {
+  margin: 0 0 8px;
+  color: #365642;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+#card-screen .card-feedback-method {
+  margin: 10px 0 0;
+  padding-top: 8px;
+  border-top: 1px solid #dce5d8;
+  font-size: 0.68rem;
+}
+
+#card-screen .feedback-answer-row,
+#reverse-screen .feedback-answer-row { margin-bottom: 7px; }
+
+#card-screen .card-back-flip-pill,
+#reverse-screen .card-back-flip-pill {
+  border-color: rgba(217, 249, 157, 0.55);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+#card-screen .card-feedback-panel .quiz-next-wrapper,
+#reverse-screen .card-feedback-panel .quiz-next-wrapper {
+  justify-content: center;
+  padding: 0 12px 12px;
+}
+
+#quiz-screen .quiz-card-container { background: #fffdf7; }
+#quiz-screen .category-pill { color: #14532d; border-color: #86efac; background: #e8f5e9; }
+#card-screen .feedback-badge.feedback-submitted { color: #176b3a; background: #e8f5e9; border-color: #86efac; }
+/* Gameplay-specific overrides are complete above. */
+
+/* Keep the card and its controls in the first gameplay viewport. */
+#card-screen .card-arena-card {
+  padding: 8px 12px;
+}
+
+#card-screen .card-screen-header {
+  margin-bottom: 6px;
+}
+
+#card-screen .card-screen-top-bar {
+  margin-bottom: 2px;
+}
+
+#card-screen .card-arena-sub {
+  line-height: 1.3;
+}
+
+#card-screen .single-category-header-wrap {
+  margin-bottom: 6px;
+}
+
+#card-screen .single-category-header-banner {
+  padding: 6px 14px;
+}
+
+#card-screen .single-category-icon {
+  width: 36px;
+  height: 36px;
+}
+
+#card-screen .card-stage {
+  margin: 0 auto 4px;
+}
+
+#card-screen .playing-card {
+  height: clamp(340px, calc(100dvh - 430px), 590px);
+  min-height: 0;
+}
+
+#card-screen .card-controls-panel {
+  margin-top: 0;
+  gap: 4px;
+}
+
+#card-screen .card-footer-nav {
+  margin-top: 0;
+}
+
+@media (max-width: 600px) {
+  #card-screen .playing-card,
+  #reverse-screen .playing-card { height: min(72vh, 620px); min-height: 500px; }
+  #card-screen .single-category-header-banner { padding: 9px 11px; }
+  #card-screen .single-category-desc { display: none; }
+  #card-screen .card-toolbar-pill {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 4px;
+    border-radius: 16px;
+  }
+  #card-screen .toolbar-btn { padding: 6px; font-size: 0.7rem; white-space: nowrap; }
+  #card-screen .btn-flip-prominent { padding: 6px 8px !important; }
+
+  #reverse-screen .reverse-action-wrap {
+    flex-direction: column;
+    width: min(100%, 480px);
+  }
+
+  #reverse-screen .reverse-action-wrap .btn { width: 100%; }
+}
+
+@media (max-width: 768px) {
+  #card-screen .playing-card {
+    height: clamp(300px, calc(100dvh - 450px), 460px);
+    min-height: 0;
+  }
+
+}
+
+@media (max-height: 680px) {
+  #card-screen .card-arena-title,
+  #card-screen .card-arena-sub {
+    display: none;
+  }
+
+  #card-screen .card-screen-header {
+    margin-bottom: 4px;
+  }
+
+  #card-screen .playing-card {
+    height: clamp(240px, calc(100dvh - 390px), 280px);
+    min-height: 0;
+  }
+}
+
+/* End of gameplay-specific overrides. */

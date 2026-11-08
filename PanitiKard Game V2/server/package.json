@@ -5,7 +5,10 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "test": "node --test test/*.test.js",
+    "check:supabase": "node src/scripts/checkSupabase.js",
+    "seed:catalog": "node src/scripts/seedCatalog.js"
   },
   "keywords": [
     "panitikard",

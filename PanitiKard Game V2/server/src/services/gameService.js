@@ -1,0 +1,79 @@
+const { HttpError } = require('../middleware/httpError');
+
+function dbFailure(error, action) {
+  if (!error) return;
+  if (error.code === '23505') throw new HttpError(409, 'ANSWER_ALREADY_RECORDED', 'An answer for this question and round is already recorded.');
+  if (error.code === 'P0002') throw new HttpError(404, 'SESSION_OR_QUESTION_NOT_FOUND', 'The session or published question was not found.');
+  if (error.code === '23514') throw new HttpError(409, 'GAME_RULE_REJECTED', error.message || 'The answer violates game rules.');
+  if (error.code === '22023') throw new HttpError(400, 'INVALID_RESPONSE', 'The answer was not accepted.');
+  if (error.code === '42501') throw new HttpError(403, 'FORBIDDEN', 'This operation is not permitted for this account.');
+  console.error(`[Game] ${action} failed:`, error.code || error.message);
+  throw new HttpError(503, 'DATABASE_ERROR', `Unable to ${action.toLowerCase()}.`);
+}
+
+function normalizeResponse(value, { allowEmpty = false } = {}) {
+  if ((typeof value !== 'string' && !(allowEmpty && (value === null || value === undefined))) ||
+      (typeof value === 'string' && value.length > 4000) ||
+      (!allowEmpty && typeof value === 'string' && value.trim().length === 0)) {
+    throw new HttpError(400, 'INVALID_RESPONSE', 'Answer must be a non-empty string up to 4000 characters unless this is a timeout.');
+  }
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function createGameService() {
+  return {
+    async createSession(client, user, input) {
+      const topicCode = typeof input?.topicCode === 'string' ? input.topicCode : '';
+      const mode = input?.mode;
+      if (!topicCode || !['deck', 'quiz'].includes(mode)) throw new HttpError(400, 'INVALID_SESSION', 'topicCode and mode (deck or quiz) are required.');
+      const { data, error } = await client.rpc('create_game_session', {
+        p_topic_code: topicCode,
+        p_mode: mode,
+        p_student_name: String(input.studentName || user.profile.display_name || '').slice(0, 120)
+      });
+      dbFailure(error, 'Create session');
+      return Array.isArray(data) ? data[0] : data;
+    },
+
+    async submitAnswer(client, user, sessionId, input) {
+      const questionCode = input?.questionCode;
+      const round = input?.round || 'main';
+      const isTimeout = input?.isTimeout === true;
+      const response = normalizeResponse(input?.response, { allowEmpty: isTimeout });
+      if (typeof questionCode !== 'string' || !/^[a-z0-9][a-z0-9-]{0,119}$/.test(questionCode)) {
+        throw new HttpError(400, 'INVALID_QUESTION_CODE', 'A valid questionCode is required.');
+      }
+      if (!['main', 'reverse'].includes(round)) throw new HttpError(400, 'INVALID_ROUND', 'round must be main or reverse.');
+      const { data, error } = await client.rpc('submit_game_answer', {
+        p_session_id: sessionId,
+        p_question_code: questionCode,
+        p_round: round,
+        p_response: response,
+        p_is_timeout: isTimeout
+      });
+      dbFailure(error, 'Record answer');
+      return Array.isArray(data) ? data[0] : data;
+    },
+
+    async finishSession(client, sessionId) {
+      const { data, error } = await client.rpc('finish_game_session', { p_session_id: sessionId });
+      dbFailure(error, 'Finish session');
+      return Array.isArray(data) ? data[0] : data;
+    },
+
+    async getSession(client, sessionId) {
+      const { data: session, error } = await client.from('game_sessions')
+        .select('id, topic_id, mode, status, student_name_snapshot, main_score, reverse_score, started_at, completed_at')
+        .eq('id', sessionId).maybeSingle();
+      dbFailure(error, 'Load session');
+      if (!session) throw new HttpError(404, 'SESSION_NOT_FOUND', 'Session not found.');
+      const { data: answers, error: answersError } = await client.from('student_answers')
+        .select('question_id, question_version_id, round, response, is_correct, points_awarded, max_points, evaluation_method, evaluation_record, answered_at')
+        .eq('session_id', sessionId).order('answered_at');
+      dbFailure(answersError, 'Load session answers');
+      return { ...session, answers: answers || [] };
+    }
+  };
+}
+
+module.exports = { createGameService, normalizeResponse };

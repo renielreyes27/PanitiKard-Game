@@ -151,13 +151,23 @@ PanitiKard Game V2/
   - Status helper function exposed in `GET /health`.
 - **Security & Git Ignore**: `.env` strictly ignored by Git; `.env.example` provided with non-sensitive placeholders.
 
+### Phase 4 implementation in this workspace (migration not applied)
+
+- `server/supabase/migrations/202611080001_phase4_catalog_and_gameplay.sql` defines profiles, the four stable topics, separate card categories, versioned questions/choices, private evaluation rubrics, game sessions, student answers, indexes, RLS policies, and server/database-side scoring functions. Question versions are snapshotted at session start so editing or archiving a question does not change an in-progress or historical attempt.
+- The migration seeds the four topic rows and seven card categories only. `npm run seed:catalog` imports the current 14 card questions and 30 quiz questions as immutable versions; it requires a backend-only service-role key and skips unchanged content.
+- Express routes are mounted under `/api/v1`: public `GET /topics` and `GET /topics/:topicCode/questions`; authenticated session `POST /sessions`, `GET /sessions/:id`, `POST /sessions/:id/answers`, and `POST /sessions/:id/finish`; and teacher/admin topic/question create, version, publish, and archive routes under `/admin`.
+- Student answer requests send only the response. The database scoring RPC loads the private answer key/rubric, validates Reverse Round eligibility and its three-attempt cap, and stores the evaluated answer and score atomically. The service-role key is not used by student request handlers.
+- The browser API client is opt-in. Set the `panitikard-api-base-url` meta value to the backend `/api/v1` URL and provide a user Supabase access token through `window.PANITIKARD_GET_ACCESS_TOKEN`; without these settings, the existing standalone local gameplay remains available. Never put the service-role key in the browser.
+- From `server/`, run `npm test` for API/service tests and `npm run check:supabase` for a read-only `topics` query. The Supabase migration must be reviewed and explicitly applied by an authorized operator before seeding or live use. No production migration is applied by these commands.
+
 ---
 
 ## ⚠️ Current Scope & Remaining Items
 
-- **Phase 4 Step 4 Target**: Database Table Creation and SQL Migrations in Supabase.
-- **Phase 4 Step 5 Target**: Client-to-Backend REST API connections for session persistence and student records.
-- **Phase 5 Target**: Gemini AI Live API integration for natural language evaluation of open-ended literary responses.
+- Phase 4 schema and API code are implemented locally, but the Supabase migration has **not** been applied. Connectivity currently reaches the Supabase REST endpoint but returns `PGRST205` for the not-yet-created `topics` table.
+- The current local Supabase config has an anon key but no service-role key. Public reads and user-scoped API access can be configured after migration; catalog seeding and privileged operations remain unavailable until the operator configures a backend-only service-role key.
+- Teacher/Admin UI, Supabase Auth UI/token provisioning, database migration application, and catalog seeding are not completed here.
+- **Phase 5** Gemini evaluation is not connected; current grading uses deterministic question-specific rubrics.
 
 ---
 

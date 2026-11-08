@@ -7,6 +7,7 @@
   <title>PanitiKard V2 - Digital na Pagkatutong Pampanitikan</title>
   <meta name="description"
     content="PanitiKard V2 - Isang interaktibong educational card game para sa Filipino at Panitikan">
+  <meta name="panitikard-api-base-url" content="">
 
   <!-- Google Fonts: Pacifico (Logo Script), Caveat (Handwriting), Fraunces (Serif), & Plus Jakarta Sans (Sans) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -23,7 +24,8 @@
   <header class="app-header">
     <div class="header-container">
       <div class="header-left-group">
-        <button type="button" id="header-menu-btn" class="header-circle-btn" aria-label="Menu ng PanitiKard" title="Menu">
+        <button type="button" id="header-menu-btn" class="header-circle-btn" aria-label="Menu ng PanitiKard"
+          title="Menu">
           <span class="hamburger-bar"></span>
           <span class="hamburger-bar"></span>
           <span class="hamburger-bar"></span>
@@ -82,7 +84,8 @@
         </p>
 
         <p class="welcome-handwritten-body">
-          Ang PanitiKard ay isang interactive card game na naglalayong paunlarin ang kaalaman at kasanayan ng mga mag-aaral sa wikang Filipino sa isang masaya at makabuluhang paraan.
+          Ang PanitiKard ay isang interactive card game na naglalayong paunlarin ang kaalaman at kasanayan ng mga
+          mag-aaral sa wikang Filipino sa isang masaya at makabuluhang paraan.
         </p>
 
         <!-- Role Login Choices -->
@@ -137,8 +140,8 @@
                 Pangalan ng Mag-aaral
               </label>
               <div class="sage-input-wrap">
-                <input type="text" id="student-name" name="studentName" class="sage-input-field"
-                  placeholder="" maxlength="60" autocomplete="name" required>
+                <input type="text" id="student-name" name="studentName" class="sage-input-field" placeholder=""
+                  maxlength="60" autocomplete="name" required>
               </div>
             </div>
 
@@ -162,7 +165,8 @@
           </h2>
 
           <p class="setup-intro-desc">
-            Pumili ng isang makulay na topic card at sagutin ang mga tanong. Bawat kard ay may likurang bahagi para sa paliwanag
+            Pumili ng isang makulay na topic card at sagutin ang mga tanong. Bawat kard ay may likurang bahagi para sa
+            paliwanag
           </p>
         </div>
 
@@ -170,7 +174,8 @@
     </section>
 
     <!-- Teacher / Admin Information Modal -->
-    <div id="teacher-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="teacher-modal-title">
+    <div id="teacher-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true"
+      aria-labelledby="teacher-modal-title">
       <div class="modal-dialog">
         <div class="modal-badge-row">
           <span class="grade-pill-dark">Portal ng Guro &bull; Phase 4</span>
@@ -178,7 +183,8 @@
         </div>
         <h2 id="teacher-modal-title" class="modal-title">Portal ng Guro / Admin</h2>
         <p class="modal-body-text">
-          Ang nakalaang portal ng guro para sa pagsusuri ng mga marka at talaan ng mag-aaral ay ihahanda sa Phase 4 backend integration kasama ang Supabase Auth.
+          Ang nakalaang portal ng guro para sa pagsusuri ng mga marka at talaan ng mag-aaral ay ihahanda sa Phase 4
+          backend integration kasama ang Supabase Auth.
         </p>
         <p class="modal-sub-text">
           Sa ngayon, maaari mong subukan at laruin ang buong educational card game bilang mag-aaral.
@@ -230,8 +236,8 @@
           <!-- Row 1: Alamat & Kahulugan ng Pahayag (Side-by-Side) -->
           <div class="topic-row topic-row-split">
             <!-- Card 1: Alamat (Yellow #F4F56B / Center #F5EBCB) -->
-            <div class="topic-card card-alamat deck-box" data-deck-id="alamat" role="radio" aria-checked="false" tabindex="0"
-              aria-label="Paksa 1: Alamat. 15 Tanong sa Pagsusuri.">
+            <div class="topic-card card-alamat deck-box" data-deck-id="alamat" role="radio" aria-checked="false"
+              tabindex="0" aria-label="Paksa 1: Alamat. 15 Tanong sa Pagsusuri.">
               <span class="topic-corner corner-tl">01✦</span>
               <span class="topic-corner corner-br">✦10</span>
               <div class="topic-diagonal-band">
@@ -241,8 +247,8 @@
             </div>
 
             <!-- Card 2: Kahulugan ng Pahayag (Red #D92C16 / Center #F5E8E8) -->
-            <div class="topic-card card-meaning deck-box" data-deck-id="meaning" role="radio" aria-checked="false" tabindex="0"
-              aria-label="Paksa 2: Kahulugan ng Pahayag. 7 Uri ng Kard Pampanitikan.">
+            <div class="topic-card card-meaning deck-box" data-deck-id="meaning" role="radio" aria-checked="false"
+              tabindex="0" aria-label="Paksa 2: Kahulugan ng Pahayag. 7 Uri ng Kard Pampanitikan.">
               <span class="topic-corner corner-tl">01✦</span>
               <span class="topic-corner corner-br">✦10</span>
               <div class="topic-diagonal-band">
@@ -255,8 +261,8 @@
           <!-- Row 2: Elemento ng Akda (Centered) (Purple #5030DC / Center #E4E4F8) -->
           <div class="topic-row topic-row-single">
             <!-- Card 3: Elemento ng Akda -->
-            <div class="topic-card card-elements deck-box" data-deck-id="elements" role="radio" aria-checked="true" tabindex="0"
-              aria-label="Paksa 3: Elemento ng Akda. 7 Uri ng Kard Pampanitikan.">
+            <div class="topic-card card-elements deck-box" data-deck-id="elements" role="radio" aria-checked="true"
+              tabindex="0" aria-label="Paksa 3: Elemento ng Akda. 7 Uri ng Kard Pampanitikan.">
               <span class="topic-corner corner-tl">02✦</span>
               <span class="topic-corner corner-br">✦20</span>
               <div class="topic-diagonal-band">
@@ -269,13 +275,14 @@
           <!-- Row 3: Maikling Kwento (Centered) (Deep Green #00663D / Center #D9EFDC) -->
           <div class="topic-row topic-row-single">
             <!-- Card 4: Maikling Kwento -->
-            <div class="topic-card card-maikling-kwento deck-box" data-deck-id="maikling-kwento" role="radio" aria-checked="false" tabindex="0"
-              aria-label="Paksa 4: Maikling Kwento. 15 Tanong sa Pagsusuri.">
+            <div class="topic-card card-maikling-kwento deck-box" data-deck-id="maikling-kwento" role="radio"
+              aria-checked="false" tabindex="0" aria-label="Paksa 4: Maikling Kwento. 15 Tanong sa Pagsusuri.">
               <span class="topic-corner corner-tl">01✦</span>
               <span class="topic-corner corner-br">✦10</span>
               <div class="topic-diagonal-band">
                 <h2 class="topic-title">Maikling Kwento</h2>
-                <p class="topic-subtitle">Kahulugan . Elemento . Uri . Bahagi ng Banghay . Tauhan . Tagpuan . Aral . Pagsusuri</p>
+                <p class="topic-subtitle">Kahulugan . Elemento . Uri . Bahagi ng Banghay . Tauhan . Tagpuan . Aral .
+                  Pagsusuri</p>
               </div>
             </div>
           </div>
@@ -353,7 +360,8 @@
 
           <!-- Submit Button -->
           <div id="quiz-submit-wrapper" class="quiz-action-wrapper">
-            <button type="button" id="btn-quiz-submit" class="btn btn-primary btn-large btn-quiz-submit">
+            <button type="button" id="btn-quiz-submit"
+              class="btn btn-primary btn-large btn-quiz-submit btn-action-purple">
               <span>I-submit ang Sagot</span>
               <span class="btn-check-icon" aria-hidden="true">✓</span>
             </button>
@@ -378,10 +386,15 @@
                 <span class="feedback-label">📚 Pampanitikang Paliwanag:</span>
                 <p id="quiz-feedback-explanation" class="feedback-explanation-text">-</p>
               </div>
+              <div id="quiz-feedback-keywords-wrap" class="feedback-terms-box hidden">
+                <span class="feedback-label">🔑 Mga Susing Kaisipan:</span>
+                <p id="quiz-feedback-keywords" class="feedback-terms-text">-</p>
+              </div>
             </div>
 
             <div class="quiz-next-wrapper">
-              <button type="button" id="btn-quiz-next" class="btn btn-primary btn-large btn-quiz-next">
+              <button type="button" id="btn-quiz-next"
+                class="btn btn-primary btn-large btn-quiz-next btn-action-purple">
                 <span id="quiz-next-btn-text">Susunod na Tanong</span>
                 <span class="btn-arrow" aria-hidden="true">&rarr;</span>
               </button>
@@ -415,9 +428,26 @@
           </p>
         </header>
 
-        <!-- 7 Card Types Navigation Switcher with Fading Scroll Container -->
-        <div class="card-type-switcher-container">
-          <div id="card-type-tabs" class="card-type-tabs" role="tablist" aria-label="Mga Uri ng Kard">
+        <!-- Single Active Category Header (Displays ONLY the active card's category; inactive are hidden) -->
+        <div class="single-category-header-wrap">
+          <div id="single-active-category-banner" class="single-category-header-banner theme-green" role="region"
+            aria-label="Aktibong Kategorya ng Kard">
+            <div class="single-category-left">
+              <span id="active-cat-icon" class="single-category-icon">❓</span>
+              <div class="single-category-info">
+                <span class="single-category-kicker">Kasalukuyang Kategorya</span>
+                <h3 id="active-cat-name" class="single-category-title">Tanong</h3>
+              </div>
+            </div>
+            <div class="single-category-right">
+              <span id="active-cat-desc" class="single-category-desc">Kaalaman at Kahulugan</span>
+              <span id="active-cat-step" class="single-category-step-pill">Kard 1 ng 7</span>
+            </div>
+          </div>
+
+          <!-- Inactive Category Tabs visually hidden to comply with single active header requirement while retaining tablist accessibility & test compatibility -->
+          <div id="card-type-tabs" class="card-type-tabs sr-tabs" role="tablist" aria-label="Mga Uri ng Kard"
+            style="display: none;">
             <button type="button" class="type-tab active" data-type="question" role="tab" aria-selected="true">
               <span class="tab-icon">❓</span>
               <span class="tab-label-group">
@@ -477,16 +507,18 @@
             <div id="interactive-card" class="playing-card" tabindex="0" role="region"
               aria-label="Interaktibong 3D Flip Kard. Pindutin upang baligtarin.">
 
-              <!-- CARD FRONT (Harap ng Kard) -->
-              <div class="card-face card-front">
-                <div class="card-decor-border">
+              <!-- CARD FRONT (Harap ng Kard - UNO-Inspired Design) -->
+              <div class="card-face card-front uno-card-front">
+                <div class="card-decor-border uno-card-frame">
 
-                  <!-- Top Row -->
-                  <div class="card-face-header">
-                    <div class="corner-brand">
-                      <span id="front-card-num" class="corner-number">01</span>
-                      <span class="corner-star">✦</span>
-                    </div>
+                  <!-- Top-Left Corner Pip (UNO Style) -->
+                  <div class="uno-corner-pip corner-top-left">
+                    <span id="front-card-num" class="uno-pip-num">01</span>
+                    <span id="front-card-pip-icon" class="uno-pip-icon" aria-hidden="true">❓</span>
+                  </div>
+
+                  <!-- Top Meta Bar -->
+                  <div class="card-face-header uno-face-header">
                     <div id="front-card-type-badge" class="card-type-pill">
                       <span class="type-badge-icon">❓</span>
                       <span class="type-badge-text">Tanong &bull; Question</span>
@@ -498,122 +530,409 @@
                     <div id="front-deck-badge" class="deck-tag-pill">Mga Elemento</div>
                   </div>
 
-                  <!-- Center Body -->
-                  <div class="card-face-body">
-                    <div class="card-illustration-wrap">
-                      <div id="front-card-icon" class="card-hero-icon" aria-hidden="true">❓</div>
-                    </div>
+                  <!-- UNO Iconic Central Playing Surface / Slanted Oval -->
+                  <div class="uno-card-center-oval">
+                    <div class="card-face-body">
+                      <div class="card-illustration-wrap">
+                        <div id="front-card-icon" class="card-hero-icon" aria-hidden="true">❓</div>
+                      </div>
 
-                    <h2 id="front-card-title" class="card-front-title">Pagsusuri sa Tagpuan at Atmospera</h2>
+                      <h2 id="front-card-title" class="card-front-title">Pagsusuri sa Tagpuan at Atmospera</h2>
 
-                    <div class="prompt-box">
-                      <p id="front-card-prompt" class="card-front-prompt">
-                        Naglo-load ng tanong...
-                      </p>
-                    </div>
+                      <div class="prompt-box">
+                        <p id="front-card-prompt" class="card-front-prompt">
+                          Naglo-load ng tanong...
+                        </p>
+                      </div>
 
-                    <!-- Interactive Options Grid (2x2 on Desktop, 1 Col on Mobile) -->
-                    <div id="front-card-options" class="card-options-grid">
-                      <!-- Rendered dynamically -->
+                      <!-- Interactive Options Grid / Text Input Area -->
+                      <div id="front-card-options" class="card-options-grid">
+                        <!-- Rendered dynamically -->
+                      </div>
                     </div>
                   </div>
 
-                  <!-- Bottom Row -->
-                  <div class="card-face-footer">
+                  <!-- Bottom Meta & Inverted Corner Pip (UNO Style) -->
+                  <div class="card-face-footer uno-face-footer">
                     <div id="front-flip-pill" class="flip-interactive-pill" aria-hidden="true">
                       <span id="front-flip-icon" class="flip-pill-icon">🔒</span>
                       <span id="front-flip-pill-text">Mag-submit muna ng sagot</span>
                     </div>
-                    <div class="corner-brand corner-flipped">
-                      <span id="front-card-num-bottom" class="corner-number">01</span>
-                      <span class="corner-star">✦</span>
+
+                    <!-- Bottom-Right Corner Pip (Inverted 180deg) -->
+                    <div class="uno-corner-pip corner-bottom-right">
+                      <span id="front-card-num-bottom" class="uno-pip-num">01</span>
+                      <span id="front-card-pip-icon-bottom" class="uno-pip-icon" aria-hidden="true">❓</span>
                     </div>
                   </div>
 
                 </div>
               </div>
 
-              <!-- CARD BACK (Likod ng Kard) -->
-              <div class="card-face card-back">
-                <div class="card-decor-border card-back-inner">
+              <!-- CARD BACK (Uniform Design for All PanitiKard Cards) -->
+              <div class="card-face card-back uniform-card-back">
+                <div class="card-back-outer-border">
+                  <div class="card-back-pattern" aria-hidden="true"></div>
+                  <div class="card-back-inner-frame">
+                    <span class="card-back-corner corner-tl" aria-hidden="true">✦</span>
+                    <span class="card-back-corner corner-tr" aria-hidden="true">✦</span>
 
-                  <!-- Top Row -->
-                  <div class="card-face-header">
-                    <div class="corner-brand">
-                      <span id="back-card-num" class="corner-number">01</span>
-                      <span class="corner-star">✦</span>
-                    </div>
-                    <div class="card-type-pill back-pill">
-                      <span class="type-badge-icon">📖</span>
-                      <span class="type-badge-text">Likod &bull; Paliwanag</span>
-                    </div>
-                    <div class="deck-tag-pill">Pampanitikan</div>
-                  </div>
-
-                  <!-- Back Content -->
-                  <div class="card-face-body back-body">
-                    <div class="back-answer-banner">
-                      <div class="answer-header-wrap">
-                        <span class="answer-check-icon">✓</span>
-                        <span class="answer-badge-title">Tamang Sagot / Pagwawasto:</span>
+                    <div id="card-back-brand-content" class="card-back-centerpiece">
+                      <div class="card-back-emblem" aria-hidden="true">
+                        <!-- Golden Open Book Literary Emblem -->
+                        <svg class="open-book-svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"
+                          aria-hidden="true">
+                          <path d="M32 16C26 12 14 12 8 14V50C14 48 26 48 32 52C38 48 50 48 56 50V14C50 12 38 12 32 16Z"
+                            fill="#14351c" stroke="#d4af37" stroke-width="2.5" stroke-linejoin="round" />
+                          <path d="M32 16V52" stroke="#d4af37" stroke-width="2.5" stroke-linecap="round" />
+                          <path d="M13 22C19 20 25 20 29 23" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                          <path d="M13 29C19 27 25 27 29 30" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                          <path d="M13 36C19 34 25 34 29 37" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                          <path d="M51 22C45 20 39 20 35 23" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                          <path d="M51 29C45 27 39 27 35 30" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                          <path d="M51 36C45 34 39 34 35 37" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                        </svg>
                       </div>
-                      <span id="back-answer-highlight" class="answer-badge-val">-</span>
+                      <h2 class="card-back-brand">PanitiKard</h2>
+                      <span class="card-back-tagline">DUNONG AT PANITIKAN</span>
                     </div>
 
-                    <div class="back-explanation-card">
-                      <h3 class="explanation-title">📚 Pampanitikang Paliwanag:</h3>
-                      <p id="back-explanation-text" class="explanation-text">
-                        Naglo-load ng paliwanag...
-                      </p>
+                    <div id="card-feedback-box" class="card-feedback-panel hidden" aria-live="polite">
+                      <div id="card-feedback-header" class="card-feedback-head feedback-correct">
+                        <span id="card-feedback-icon" class="feedback-icon" aria-hidden="true">✓</span>
+                        <div class="feedback-title-group">
+                          <span id="card-feedback-status" class="feedback-status">TAMA!</span>
+                          <span id="card-feedback-points" class="feedback-points">+1 Punto</span>
+                        </div>
+                      </div>
+                      <div class="card-feedback-body">
+                        <p id="card-feedback-message" class="card-feedback-message"></p>
+                        <div class="feedback-answer-row">
+                          <span class="feedback-label">Iyong Sagot:</span>
+                          <strong id="back-student-answer" class="feedback-student-answer">-</strong>
+                        </div>
+                        <div class="feedback-answer-row">
+                          <span class="feedback-label">Tamang Sagot / Batayan:</span>
+                          <strong id="back-answer-highlight" class="feedback-correct-answer">-</strong>
+                        </div>
+                        <div class="feedback-explanation-row">
+                          <span class="feedback-label">📚 Pampanitikang Paliwanag:</span>
+                          <p id="back-explanation-text" class="feedback-explanation-text">-</p>
+                        </div>
+                        <div id="back-trivia-wrap" class="feedback-trivia-wrap">
+                          <span class="feedback-label">✨ Alam Mo Ba?</span>
+                          <p id="back-trivia-text" class="feedback-trivia-text">-</p>
+                        </div>
+                        <div id="back-terms-box" class="feedback-terms-box hidden">
+                          <span class="feedback-label">🔑 Mga Susing Kaisipan:</span>
+                          <p id="back-terms-text" class="feedback-terms-text">-</p>
+                        </div>
+                        <p id="card-feedback-method" class="card-feedback-method">Sinuri batay sa itinakdang sagot at pamantayan; walang AI service na nakakonekta.</p>
+                      </div>
                     </div>
 
-                    <div class="back-trivia-box">
-                      <h4 class="trivia-title">✨ Alam Mo Ba?</h4>
-                      <p id="back-trivia-text" class="trivia-text">
-                        Naglo-load ng karagdagang kaalaman...
-                      </p>
-                    </div>
+                    <span class="card-back-corner corner-bl" aria-hidden="true">✦</span>
+                    <span class="card-back-corner corner-br" aria-hidden="true">✦</span>
                   </div>
 
-                  <!-- Bottom Row -->
-                  <div class="card-face-footer">
-                    <div class="flip-interactive-pill" aria-hidden="true">
-                      <span class="flip-pill-icon">🔄</span>
-                      <span>I-tap upang Bumalik sa Harap</span>
-                    </div>
-                    <div class="corner-brand corner-flipped">
-                      <span id="back-card-num-bottom" class="corner-number">01</span>
-                      <span class="corner-star">✦</span>
-                    </div>
+                  <div id="card-back-flip-pill" class="card-back-flip-pill" aria-hidden="true">
+                    <span>🔄 I-tap upang Bumalik sa Harap</span>
                   </div>
-
                 </div>
               </div>
 
             </div>
 
           </div>
+
+        </div>
+      </div>
+
+      <!-- Compact Floating Controls Toolbar -->
+      <div class="card-controls-panel">
+        <div class="card-toolbar-pill">
+          <button type="button" id="btn-prev-card" class="toolbar-btn btn-prev-nav" title="Nakaraang Uri ng Kard">
+            <span>&larr; Nakaraan</span>
+          </button>
+          <button type="button" id="btn-flip-card" class="toolbar-btn btn-flip-accent btn-flip-prominent"
+            title="I-flip ang kard">
+            <span>🔄 I-flip ang Kard</span>
+          </button>
+          <button type="button" id="btn-next-card" class="toolbar-btn btn-next-nav btn-action-purple"
+            title="Susunod na Uri ng Kard">
+            <span>Susunod &rarr;</span>
+          </button>
         </div>
 
-        <!-- Compact Floating Controls Toolbar -->
-        <div class="card-controls-panel">
-          <div class="card-toolbar-pill">
-            <button type="button" id="btn-prev-card" class="toolbar-btn" title="Nakaraang Uri ng Kard">
-              <span>&larr; Nakaraan</span>
+        <div class="card-footer-nav">
+          <button type="button" id="btn-back-to-deck" class="btn btn-outline btn-compact btn-deck-return">
+            <span>&larr; Pumili ng Ibang Topic Deck</span>
+          </button>
+        </div>
+      </div>
+
+      </div>
+    </section>
+
+    <!-- Screen 3.7: Reverse Round Introduction Screen -->
+    <section id="reverse-intro-screen" class="game-screen hidden" aria-labelledby="reverse-intro-title">
+      <div class="screen-card reverse-intro-card">
+        <div class="reverse-hero-badge">
+          <span class="reverse-badge-icon" aria-hidden="true">🔁</span>
+          <span class="reverse-badge-text">REVERSE ROUND &bull; IKALAWANG PAGKAKATAON</span>
+        </div>
+
+        <h1 id="reverse-intro-title" class="reverse-intro-heading">
+          Handa ka na bang bumawi?
+        </h1>
+
+        <p class="reverse-intro-desc">
+          May mga katanungan kang hindi nasagot nang wasto sa nakaraang round. Ito ang iyong <strong>Reverse
+            Round</strong>—isang espesyal na ikalawang pagkakataon upang itama ang iyong mga naging kamalian gamit ang
+          <strong>Special Red Reverse Card</strong>!
+        </p>
+
+        <div class="reverse-rules-panel">
+          <h2 class="reverse-rules-title">📜 Mga Panuntunan sa Reverse Round:</h2>
+          <ul class="reverse-rules-list">
+            <li><strong>Hanggang 3 Pagsubok:</strong> Mayroon kang hanggang tatlong (3) pagkakataon upang sumagot muli.
+            </li>
+            <li><strong>Mga Maling Sagot Lamang:</strong> Tanging ang mga tanong na hindi mo naitama sa main round ang
+              mapipili.</li>
+            <li><strong>Karagdagang Puntos:</strong> Bawat tamang sagot ay magdaragdag ng puntos sa iyong pinal na marka
+              nang hindi binubura ang iyong orihinal na rekord!</li>
+          </ul>
+        </div>
+
+        <div class="reverse-status-highlight">
+          <span class="highlight-label">Mga Tanong na Maaaring Itama:</span>
+          <strong id="reverse-eligible-count" class="highlight-count">0</strong>
+          <span id="reverse-attempt-limit-label" class="highlight-sub">(Hanggang 3 ang mapipili)</span>
+        </div>
+
+        <div class="form-actions flex-actions reverse-actions">
+          <button type="button" id="btn-start-reverse-round" class="btn btn-primary btn-large btn-reverse-start">
+            <span class="btn-icon" aria-hidden="true">🔁</span>
+            <span>Simulan ang Reverse Round</span>
+            <span class="btn-arrow" aria-hidden="true">&rarr;</span>
+          </button>
+          <button type="button" id="btn-skip-reverse-round" class="btn btn-secondary">
+            <span>Laktawan at Tingnan ang Resulta</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen 3.8: Reverse Round Gameplay Screen (Special Red Reverse Card) -->
+    <section id="reverse-screen" class="game-screen hidden" aria-labelledby="reverse-screen-title">
+      <div class="screen-card reverse-arena-card">
+
+        <!-- Top Header & Attempt Counter -->
+        <header class="reverse-header-bar">
+          <div class="reverse-header-meta">
+            <button type="button" id="btn-reverse-back-decks" class="btn-crumb" title="Bumalik sa mga Paksa">
+              <span>&larr; Mga Paksa</span>
             </button>
-            <button type="button" id="btn-flip-card" class="toolbar-btn btn-flip-accent" title="I-flip ang kard">
-              <span>🔄 I-flip ang Kard</span>
-            </button>
-            <button type="button" id="btn-next-card" class="toolbar-btn" title="Susunod na Uri ng Kard">
-              <span>Susunod &rarr;</span>
-            </button>
+            <div class="reverse-badge-pill">
+              <span class="reverse-icon" aria-hidden="true">🔁</span>
+              <span id="reverse-screen-title">Reverse Round</span>
+            </div>
+            <div id="reverse-attempt-pill" class="reverse-counter-pill">
+              <span class="counter-label">Pagsubok:</span>
+              <strong id="reverse-attempt-text">3/3 natitira</strong>
+            </div>
+            <div id="reverse-header-timer-badge" class="challenge-timer-pill hidden" aria-live="polite">
+              <span class="timer-icon">⏱️</span>
+              <span id="reverse-header-timer-seconds">30</span>s
+            </div>
+            <div class="reverse-score-badge">
+              <span class="star-icon" aria-hidden="true">⭐</span>
+              <span id="reverse-score-text">+0 Puntos</span>
+            </div>
           </div>
 
-          <div class="card-footer-nav">
-            <button type="button" id="btn-back-to-deck" class="btn btn-outline btn-compact">
-              <span>&larr; Pumili ng Ibang Topic Deck</span>
-            </button>
+          <div class="reverse-progress-strip">
+            <div class="reverse-attempt-dots" id="reverse-attempt-dots" aria-label="Mga Pagsubok">
+              <span class="attempt-dot active"></span>
+              <span class="attempt-dot active"></span>
+              <span class="attempt-dot active"></span>
+            </div>
           </div>
+        </header>
+
+        <!-- Special Red Reverse Card 3D Stage -->
+        <div class="card-stage reverse-card-stage">
+          <div class="card-perspective">
+
+            <div id="reverse-card" class="playing-card card-theme-reverse" tabindex="0" role="region"
+              aria-label="Espesyal na Red Reverse Card. Pindutin upang baligtarin.">
+
+              <!-- CARD FRONT: SPECIAL RED REVERSE CARD -->
+              <div class="card-face card-front uno-card-front card-reverse-front">
+                <div class="card-decor-border uno-card-frame">
+
+                  <!-- Top-Left Corner Pip (Reverse Icon) -->
+                  <div class="uno-corner-pip corner-top-left reverse-pip">
+                    <span class="uno-pip-reverse" aria-hidden="true">🔁</span>
+                    <span id="reverse-card-num" class="uno-pip-num">REV</span>
+                  </div>
+
+                  <!-- Header Banner -->
+                  <div class="card-face-header uno-face-header reverse-card-header">
+                    <div class="card-type-pill reverse-card-pill">
+                      <span class="type-badge-icon" aria-hidden="true">🔁</span>
+                      <span class="type-badge-text">REVERSE CARD &bull; IKALAWANG PAGKAKATAON</span>
+                    </div>
+                    <div id="reverse-timer-badge" class="challenge-timer-pill hidden" aria-live="polite">
+                      <span class="timer-icon">⏱️</span>
+                      <span id="reverse-timer-seconds">30</span>s
+                    </div>
+                    <div id="reverse-card-category-badge" class="deck-tag-pill reverse-tag-pill">Pagsusuri</div>
+                  </div>
+
+                  <!-- Central Oval Container -->
+                  <div class="uno-card-center-oval">
+                    <div class="card-face-body">
+                      <div class="reverse-hero-symbol" aria-hidden="true">🔁</div>
+
+                      <h2 id="reverse-card-title" class="card-front-title reverse-prompt-title">Subukan Muli ang Tanong
+                      </h2>
+
+                      <div class="prompt-box">
+                        <p id="reverse-card-prompt" class="card-front-prompt">
+                          Naglo-load ng tanong...
+                        </p>
+                      </div>
+
+                      <!-- Dynamic Options / Inputs for Reverse Question -->
+                      <div id="reverse-card-options" class="card-options-grid">
+                        <!-- Populated dynamically -->
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Bottom Footer & Inverted Corner Pip -->
+                  <div class="card-face-footer uno-face-footer">
+                    <div id="reverse-flip-pill" class="flip-interactive-pill" aria-hidden="true">
+                      <span>🔄 I-flip ang Kard</span>
+                    </div>
+
+                    <!-- Bottom-Right Corner Pip (Inverted 180deg) -->
+                    <div class="uno-corner-pip corner-bottom-right reverse-pip">
+                      <span class="uno-pip-reverse" aria-hidden="true">🔁</span>
+                      <span class="uno-pip-num">REV</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              <!-- CARD BACK: UNIFORM DARK-GREEN PLAYING CARD BACK -->
+              <div class="card-face card-back uniform-card-back">
+                <div class="card-back-outer-border">
+                  <div class="card-back-pattern" aria-hidden="true"></div>
+                  <div class="card-back-inner-frame">
+                    <span class="card-back-corner corner-tl" aria-hidden="true">✦</span>
+                    <span class="card-back-corner corner-tr" aria-hidden="true">✦</span>
+
+                    <div id="reverse-card-back-brand-content" class="card-back-centerpiece">
+                      <div class="card-back-emblem" aria-hidden="true">
+                        <svg class="open-book-svg" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg"
+                          aria-hidden="true">
+                          <path d="M32 16C26 12 14 12 8 14V50C14 48 26 48 32 52C38 48 50 48 56 50V14C50 12 38 12 32 16Z"
+                            fill="#14351c" stroke="#d4af37" stroke-width="2.5" stroke-linejoin="round" />
+                          <path d="M32 16V52" stroke="#d4af37" stroke-width="2.5" stroke-linecap="round" />
+                          <path d="M13 22C19 20 25 20 29 23" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                          <path d="M13 29C19 27 25 27 29 30" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                          <path d="M13 36C19 34 25 34 29 37" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                          <path d="M51 22C45 20 39 20 35 23" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                          <path d="M51 29C45 27 39 27 35 30" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                          <path d="M51 36C45 34 39 34 35 37" stroke="#d4af37" stroke-width="1.6" stroke-linecap="round"
+                            opacity="0.85" />
+                        </svg>
+                      </div>
+                      <h2 class="card-back-brand">PanitiKard</h2>
+                      <span class="card-back-tagline">DUNONG AT PANITIKAN</span>
+                    </div>
+
+                    <div id="reverse-feedback-box" class="card-feedback-panel hidden" aria-live="polite">
+                      <div id="reverse-feedback-header" class="card-feedback-head feedback-correct">
+                        <span id="reverse-feedback-icon" class="feedback-icon" aria-hidden="true">✓</span>
+                        <div class="feedback-title-group">
+                          <span id="reverse-feedback-status" class="feedback-status">TAMA SA REVERSE ROUND!</span>
+                          <span id="reverse-feedback-points" class="feedback-points">+1 Punto</span>
+                        </div>
+                      </div>
+                      <div class="card-feedback-body">
+                        <p id="reverse-feedback-message" class="card-feedback-message"></p>
+                        <div class="feedback-answer-row">
+                          <span class="feedback-label">Iyong Sagot:</span>
+                          <strong id="reverse-feedback-student-answer" class="feedback-student-answer">-</strong>
+                        </div>
+                        <div class="feedback-answer-row">
+                          <span class="feedback-label">Tamang Sagot:</span>
+                          <strong id="reverse-feedback-answer" class="feedback-correct-answer">-</strong>
+                        </div>
+                        <div class="feedback-explanation-row">
+                          <span class="feedback-label">📚 Paliwanag:</span>
+                          <p id="reverse-feedback-explanation" class="feedback-explanation-text">-</p>
+                        </div>
+                        <div id="reverse-feedback-terms" class="feedback-terms-box hidden">
+                          <span class="feedback-label">🔑 Mga Susing Kaisipan:</span>
+                          <p id="reverse-feedback-terms-text" class="feedback-terms-text">-</p>
+                        </div>
+                      </div>
+                      <div class="quiz-next-wrapper">
+                        <button type="button" id="btn-reverse-next" class="btn btn-primary btn-large btn-quiz-next btn-action-purple">
+                          <span id="reverse-next-btn-text">Susunod na Tanong</span>
+                          <span class="btn-arrow" aria-hidden="true">&rarr;</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    <span class="card-back-corner corner-bl" aria-hidden="true">✦</span>
+                    <span class="card-back-corner corner-br" aria-hidden="true">✦</span>
+                  </div>
+
+                  <div id="reverse-card-back-flip-pill" class="card-back-flip-pill" aria-hidden="true">
+                    <span>🔄 I-tap upang Bumalik sa Harap</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- Alert banner and controls stay outside the card stage so they cannot shrink the card. -->
+        <div id="reverse-alert-box" class="alert-box alert-error hidden" role="alert" aria-live="polite">
+          <span class="alert-icon" aria-hidden="true">⚠️</span>
+          <span id="reverse-alert-text">Pakilagay o piliin ang iyong sagot bago mag-submit.</span>
+        </div>
+
+        <!-- Submit Action Button -->
+        <div id="reverse-submit-wrap" class="reverse-action-wrap">
+          <button type="button" id="btn-reverse-submit"
+            class="btn btn-primary btn-large btn-reverse-submit btn-action-purple">
+            <span>I-submit ang Reverse Answer</span>
+            <span class="btn-check-icon" aria-hidden="true">✓</span>
+          </button>
+          <button type="button" id="btn-reverse-flip-card" class="btn btn-flip-prominent btn-compact">
+            <span>🔄 I-flip ang Kard</span>
+          </button>
         </div>
 
       </div>
@@ -645,9 +964,30 @@
             <div class="result-badge-row">
               <span id="result-percentage-badge" class="result-stat-badge">0% Marka</span>
               <span id="result-deck-badge" class="result-stat-badge deck-badge">Deck: -</span>
-              <span id="result-stat-correct-pill" class="result-stat-badge stat-pill-correct">✓ <span id="result-correct-count">0</span> Tama</span>
-              <span id="result-stat-incorrect-pill" class="result-stat-badge stat-pill-incorrect">✗ <span id="result-incorrect-count">0</span> Mali</span>
+              <span id="result-stat-correct-pill" class="result-stat-badge stat-pill-correct">✓ <span
+                  id="result-correct-count">0</span> Tama</span>
+              <span id="result-stat-incorrect-pill" class="result-stat-badge stat-pill-incorrect">✗ <span
+                  id="result-incorrect-count">0</span> Mali</span>
+              <span id="result-stat-reverse-pill" class="result-stat-badge stat-pill-reverse hidden">🔁 <span
+                  id="result-reverse-count">0</span> Naitama sa Reverse</span>
             </div>
+
+            <!-- Detailed Score Breakdown Strip (Main Round, Reverse Round, Final Total) -->
+            <div class="result-score-breakdown-strip">
+              <div class="score-mini-pill">
+                <span class="mini-label">Main Round:</span>
+                <strong id="result-main-round-pts">0</strong>
+              </div>
+              <div class="score-mini-pill reverse-mini-pill">
+                <span class="mini-label">Reverse Round:</span>
+                <strong id="result-reverse-pts">+0</strong>
+              </div>
+              <div class="score-mini-pill total-mini-pill">
+                <span class="mini-label">Kabuuang Pinal:</span>
+                <strong id="result-final-total-pts">0</strong>
+              </div>
+            </div>
+
             <h2 id="result-performance-title" class="result-performance-title">Pagganap</h2>
             <p id="result-performance-msg" class="result-performance-msg">
               Naglo-load ng resulta...
@@ -659,7 +999,8 @@
         <div class="result-review-section">
           <div class="result-section-header">
             <h3 id="result-review-heading" class="result-section-title">📋 Detalyadong Pagsusuri ng bawat Tanong</h3>
-            <span id="result-review-sub" class="result-section-sub">Suriin ang iyong mga sagot at ang tamang pampanitikang paliwanag.</span>
+            <span id="result-review-sub" class="result-section-sub">Suriin ang iyong mga sagot at ang tamang
+              pampanitikang paliwanag.</span>
           </div>
           <div id="result-breakdown-list" class="result-breakdown-list">
             <!-- Rendered dynamically via JavaScript -->
@@ -695,6 +1036,8 @@
 
   <!-- Scripts: Educational Card Data then Main Controller -->
   <script src="js/cards-data.js"></script>
+  <script src="js/answer-evaluator.js"></script>
+  <script src="js/game-api.js"></script>
   <script src="js/main.js"></script>
 </body>
 

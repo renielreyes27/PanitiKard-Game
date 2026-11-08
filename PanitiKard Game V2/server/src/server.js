@@ -4,7 +4,8 @@
  * ==============================================================================
  * 
  * Phase 4: Backend & Database Development (Step 1 Setup)
- * Provides REST API services, Supabase database integration, and Gemini AI proxy.
+ * Provides health and API information routes with Supabase status placeholders.
+ * Gemini evaluation is not implemented or connected in this server yet.
  */
 
 const express = require('express');
@@ -12,85 +13,71 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const config = require('./config/environment');
-const { getSupabaseStatus } = require('./services/supabase');
+const { getSupabaseStatus, checkSupabaseConnectivity } = require('./services/supabase');
+const { createCatalogService } = require('./services/catalogService');
+const { createGameService } = require('./services/gameService');
+const { createContentService } = require('./services/contentService');
+const { createApiRouter } = require('./routes/apiRoutes');
+const { HttpError } = require('./middleware/httpError');
 
-const app = express();
+function createApp({ catalogService = createCatalogService(), gameService = createGameService(),
+  contentService = createContentService(), authenticate, connectivityCheck = checkSupabaseConnectivity } = {}) {
+  const app = express();
+  app.disable('x-powered-by');
+  app.use(helmet());
+  app.use(morgan(config.nodeEnv === 'development' ? 'dev' : 'combined'));
+  app.use(express.json({ limit: '100kb' }));
+  app.use(express.urlencoded({ extended: false, limit: '100kb' }));
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (!origin || config.nodeEnv === 'development' || config.frontendOrigin.includes(origin)) return callback(null, true);
+      return callback(new Error('CORS policy rejected this origin.'));
+    },
+    credentials: true
+  }));
 
-// Security & Utility Middlewares
-app.use(helmet());
-app.use(morgan(config.nodeEnv === 'development' ? 'dev' : 'combined'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// CORS Configuration
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow non-browser requests (e.g. server-to-server, health check, curl)
-    if (!origin) return callback(null, true);
-
-    // In development mode, allow local development origins
-    if (config.nodeEnv === 'development') {
-      return callback(null, true);
-    }
-
-    if (config.frontendOrigin.includes(origin)) {
-      return callback(null, true);
-    }
-
-    return callback(new Error(`CORS policy does not allow access from ${origin}`));
-  },
-  credentials: true
-}));
-
-// Base Health Check Route
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    success: true,
-    status: 'healthy',
-    message: 'PanitiKard V2 Backend API is running smoothly.',
-    service: 'PanitiKard V2 Backend API',
-    environment: config.nodeEnv,
-    port: config.port,
-    supabase: getSupabaseStatus(),
-    timestamp: new Date().toISOString()
+  app.get('/health', async (req, res, next) => {
+    try {
+      const database = await connectivityCheck();
+      res.status(200).json({
+        success: true,
+        status: 'healthy',
+        service: 'PanitiKard V2 Backend API',
+        environment: config.nodeEnv,
+        supabase: { ...getSupabaseStatus(), connectivity: database },
+        timestamp: new Date().toISOString()
+      });
+    } catch (error) { next(error); }
   });
-});
 
-// Root API Information Route
-app.get('/', (req, res) => {
-  res.status(200).json({
+  app.get('/', (_req, res) => res.json({
     success: true,
     status: 'active',
-    message: 'Maligayang pagdating sa PanitiKard V2 Backend API!',
-    phase: 'Phase 4: Backend and Database Setup',
-    endpoints: {
-      health: '/health',
-      root: '/'
-    },
+    service: 'PanitiKard V2 Backend API',
+    endpoints: { health: '/health', api: '/api/v1' },
     timestamp: new Date().toISOString()
-  });
-});
+  }));
 
-// 404 Handler
-app.use((req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Not Found',
-    message: `Hindi nahanap ang ruta: ${req.method} ${req.originalUrl}`,
-    timestamp: new Date().toISOString()
-  });
-});
+  app.use('/api/v1', createApiRouter({ catalogService, gameService, contentService, authenticate }));
 
-// Global Error Handler
-app.use((err, req, res, next) => {
-  console.error('[PanitiKard Server Error]:', err.message);
-  res.status(err.status || 500).json({
-    success: false,
-    error: err.name || 'Internal Server Error',
-    message: err.message || 'May naganap na hindi inaasahang error sa server.',
-    timestamp: new Date().toISOString()
+  app.use((req, _res, next) => next(new HttpError(404, 'NOT_FOUND', `Route not found: ${req.method} ${req.path}`)));
+  app.use((error, _req, res, _next) => {
+    if (error instanceof SyntaxError && Object.prototype.hasOwnProperty.call(error, 'body')) {
+      error = new HttpError(400, 'INVALID_JSON', 'Request body must be valid JSON.');
+    }
+    const status = Number.isInteger(error.status) ? error.status : 500;
+    if (status >= 500) console.error('[PanitiKard API]', error.code || error.name || 'INTERNAL_ERROR');
+    res.status(status).json({
+      success: false,
+      error: error.code || 'INTERNAL_ERROR',
+      message: status >= 500 ? 'A server error occurred.' : error.message,
+      timestamp: new Date().toISOString()
+    });
   });
-});
+  return app;
+}
+
+const app = createApp();
 
 // Start listening if run directly
 if (require.main === module) {
@@ -130,4 +117,5 @@ if (require.main === module) {
 }
 
 module.exports = app;
+module.exports.createApp = createApp;
 

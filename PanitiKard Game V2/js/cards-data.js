@@ -13,8 +13,8 @@
  * 
  * Original Card Types & Scoring Rules:
  * - Question: 1 pt (Multiple Choice A-D)
- * - Statement: 1 pt (Open text, keyword matching via terms)
- * - Correction: 1 pt (Open text, error correction via terms)
+ * - Statement: 1 pt (Open text, question-specific rubric via terms)
+ * - Correction: 1 pt (Open text, question-specific correction rubric)
  * - Bonus: 2 pts (Double score for foundational concepts)
  * - Reverse: 0 pts (Concept reinforcement, unscored review)
  * - Help: 1 pt (Features hint reveal)
@@ -32,7 +32,10 @@ const PANITIKARD_CARD_TYPES = {
     subLabel: "Question", 
     icon: "❓", 
     tagClass: "type-question", 
-    color: "#2563eb",
+    color: "#16a34a",
+    categoryColor: "green",
+    themeClass: "card-theme-green",
+    unoCategory: "Kaalaman at Kahulugan (Knowledge & Definition)",
     defaultPoints: 1,
     rule: "Maramihang Pagpipilian (Multiple Choice A-D). 1 punto."
   },
@@ -43,7 +46,10 @@ const PANITIKARD_CARD_TYPES = {
     subLabel: "Statement", 
     icon: "📜", 
     tagClass: "type-statement", 
-    color: "#d97706",
+    color: "#2563eb",
+    categoryColor: "blue",
+    themeClass: "card-theme-blue",
+    unoCategory: "Pagsusuri (Analysis)",
     defaultPoints: 1,
     rule: "Pasulat na Pagpapaliwanag. Sinusuri gamit ang mga susing kaisipan (terms). 1 punto."
   },
@@ -54,18 +60,24 @@ const PANITIKARD_CARD_TYPES = {
     subLabel: "Correction", 
     icon: "✏️", 
     tagClass: "type-correction", 
-    color: "#059669",
+    color: "#2563eb",
+    categoryColor: "blue",
+    themeClass: "card-theme-blue",
+    unoCategory: "Pagsusuri (Analysis)",
     defaultPoints: 1,
     rule: "Pagwawasto ng maling pahayag. Sinusuri gamit ang mga susing salita. 1 punto."
   },
   bonus: { 
     id: "bonus", 
     v1Type: "Bonus",
-    label: "Bonus Kard", 
+    label: "Bonus",
     subLabel: "Bonus", 
     icon: "⭐", 
     tagClass: "type-bonus", 
-    color: "#ca8a04",
+    color: "#f59e0b",
+    categoryColor: "yellow",
+    themeClass: "card-theme-yellow",
+    unoCategory: "Bonus Kard",
     defaultPoints: 2,
     rule: "Espesyal na kard na may dobleng puntos (2 puntos)."
   },
@@ -76,7 +88,10 @@ const PANITIKARD_CARD_TYPES = {
     subLabel: "Reverse", 
     icon: "🔄", 
     tagClass: "type-reverse", 
-    color: "#7c3aed",
+    color: "#16a34a",
+    categoryColor: "green",
+    themeClass: "card-theme-green",
+    unoCategory: "Kaalaman at Pagbabalik-aral (Review)",
     defaultPoints: 0,
     rule: "Pagbabalik-aral. Walang hiwalay na puntos (0 puntos) at hindi isinasama sa kabuuang marka."
   },
@@ -87,7 +102,10 @@ const PANITIKARD_CARD_TYPES = {
     subLabel: "Help", 
     icon: "💡", 
     tagClass: "type-help", 
-    color: "#0891b2",
+    color: "#16a34a",
+    categoryColor: "green",
+    themeClass: "card-theme-green",
+    unoCategory: "Gabay at Kaalaman (Help)",
     defaultPoints: 1,
     rule: "Nagtataglay ng pahiwatig (hint) upang tulungan ang mag-aaral. 1 punto."
   },
@@ -99,6 +117,9 @@ const PANITIKARD_CARD_TYPES = {
     icon: "⚔️", 
     tagClass: "type-challenge", 
     color: "#dc2626",
+    categoryColor: "red",
+    themeClass: "card-theme-red",
+    unoCategory: "Hamon (Challenge)",
     defaultPoints: 1,
     timeLimitSeconds: 30,
     rule: "Mabilisang hamon sa loob ng 30 segundo. 1 punto."
@@ -159,7 +180,8 @@ const PANITIKARD_DECKS = {
         answer: "Nagbibigay ang tagpuan ng konteksto sa kilos at damdamin ng tauhan.",
         terms: [
           ["konteksto", "kaligiran", "batayan"],
-          ["tauhan", "karakter"]
+          ["tauhan", "karakter"],
+          ["kilos", "damdamin", "asal", "ugali"]
         ],
         hint: null,
         timeLimit: null,
@@ -180,7 +202,8 @@ const PANITIKARD_DECKS = {
         answer: "Magkaugnay ang tema at mensahe ng akda.",
         terms: [
           ["tema", "paksa"],
-          ["mensahe", "aral", "diwa"]
+          ["mensahe", "aral", "diwa"],
+          ["magkaugnay", "ugnay", "kaugnay"]
         ],
         hint: null,
         timeLimit: null,
@@ -200,7 +223,8 @@ const PANITIKARD_DECKS = {
         options: [],
         answer: "Banghay",
         terms: [
-          ["banghay", "balangkas"]
+          ["banghay", "balangkas", "daloy", "pagkakasunod-sunod"],
+          ["pangyayari", "pagkakasunod-sunod", "daloy"]
         ],
         hint: null,
         timeLimit: null,
@@ -220,7 +244,8 @@ const PANITIKARD_DECKS = {
         options: [],
         answer: "Banghay",
         terms: [
-          ["banghay", "balangkas"]
+          ["banghay", "balangkas", "daloy", "pagkakasunod-sunod"],
+          ["pangyayari", "pagkakasunod-sunod", "daloy"]
         ],
         hint: null,
         timeLimit: null,
@@ -260,7 +285,8 @@ const PANITIKARD_DECKS = {
         options: [],
         answer: "Tauhan",
         terms: [
-          ["tauhan", "karakter", "persona"]
+          ["tauhan", "karakter", "persona", "gumaganap"],
+          ["kumikilos", "gumaganap", "kuwento", "akda"]
         ],
         hint: null,
         timeLimit: 30, // V1 Rule: 30s Countdown Timer
@@ -324,7 +350,8 @@ const PANITIKARD_DECKS = {
         answer: "Upang maunawaan ang aral at pangunahing kaisipang nais iparating ng akda.",
         terms: [
           ["aral", "mensahe", "diwa"],
-          ["kaisipan", "ideya", "kahulugan"]
+          ["kaisipan", "ideya", "kahulugan"],
+          ["maunawaan", "pag-unawa", "naiintindihan", "unawain"]
         ],
         hint: null,
         timeLimit: null,
@@ -405,7 +432,7 @@ const PANITIKARD_DECKS = {
         options: [],
         answer: "Konteksto",
         terms: [
-          ["konteksto", "kaligiran"]
+          ["konteksto", "kaligiran", "paligid", "nakapaligid"]
         ],
         hint: "Isaalang-alang ang mga salitang nakapaligid sa pahayag.", // V1 Hint
         timeLimit: null,
