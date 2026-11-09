@@ -1,4 +1,4 @@
-const { HttpError } = require('../middleware/httpError');
+﻿const { HttpError } = require('../middleware/httpError');
 const { validateQuestionInput, requireText } = require('./questionValidation');
 
 function check(error, action) {
@@ -140,10 +140,77 @@ function createContentService() {
         .select('id, code, current_version, status').eq('code', questionCode).maybeSingle();
       check(error, 'Load question');
       if (!question) throw new HttpError(404, 'QUESTION_NOT_FOUND', 'Question not found.');
+      if (question.status === 'archived') throw new HttpError(409, 'QUESTION_ARCHIVED', 'Cannot revise an archived question. Restore it first.');
       const input = validateQuestionInput({ ...rawQuestion, code: questionCode });
-      const nextVersion = question.current_version + 1;
-      await this.addVersion(client, userId, question, input, nextVersion, 'published');
-      return { id: question.id, code: question.code, status: 'published', version: nextVersion };
+
+      // Option B: Find highest version number to avoid duplicate keys when revising multiple times
+      const { data: versions, error: vErr } = await client.from('question_versions')
+        .select('version_number').eq('question_id', question.id)
+        .order('version_number', { ascending: false }).limit(1);
+      check(vErr, 'Load versions');
+      const latestVersionNum = (versions && versions.length) ? versions[0].version_number : question.current_version;
+      const nextVersion = latestVersionNum + 1;
+
+      // Option B: Create new version as draft without immediately publishing
+      // Passing publishStatus = null leaves questions.current_version and status untouched
+      await this.addVersion(client, userId, question, input, nextVersion, null);
+      return {
+        id: question.id,
+        code: question.code,
+        status: 'draft',
+        version: nextVersion,
+        currentVersion: question.current_version,
+        isDraftRevision: true
+      };
+    },
+
+    async publishQuestion(client, questionCode, targetVersion = null) {
+      const { data: question, error } = await client.from('questions')
+        .select('id, code, current_version, status').eq('code', questionCode).maybeSingle();
+      check(error, 'Load question');
+      if (!question) throw new HttpError(404, 'QUESTION_NOT_FOUND', 'Question not found.');
+
+      let versionToPublish = targetVersion;
+      if (!versionToPublish) {
+        const { data: versions, error: vErr } = await client.from('question_versions')
+          .select('version_number').eq('question_id', question.id)
+          .order('version_number', { ascending: false }).limit(1);
+        check(vErr, 'Load versions');
+        versionToPublish = (versions && versions.length) ? versions[0].version_number : question.current_version;
+      }
+
+      const { data, error: pubErr } = await client.rpc('publish_question_version', {
+        p_question_id: question.id,
+        p_version_number: versionToPublish,
+        p_status: 'published'
+      });
+      check(pubErr, 'Publish question version');
+      return {
+        id: question.id,
+        code: question.code,
+        status: 'published',
+        currentVersion: versionToPublish
+      };
+    },
+
+    async unpublishQuestion(client, questionCode) {
+      const { data: question, error } = await client.from('questions')
+        .select('id, code, current_version, status').eq('code', questionCode).maybeSingle();
+      check(error, 'Load question');
+      if (!question) throw new HttpError(404, 'QUESTION_NOT_FOUND', 'Question not found.');
+
+      const { data, error: unpubErr } = await client.rpc('publish_question_version', {
+        p_question_id: question.id,
+        p_version_number: question.current_version,
+        p_status: 'draft'
+      });
+      check(unpubErr, 'Unpublish question version');
+      return {
+        id: question.id,
+        code: question.code,
+        status: 'draft',
+        currentVersion: question.current_version
+      };
     },
 
     async archiveQuestion(client, questionCode) {

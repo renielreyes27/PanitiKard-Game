@@ -1,0 +1,8 @@
+﻿{
+  "scripts": {
+    "dev": "concurrently -k -n BACKEND,FRONTEND \"npm --prefix server run dev\" \"npx http-server . -p 8080\""
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.7"
+  }
+}

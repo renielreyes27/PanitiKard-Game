@@ -5,10 +5,11 @@
  * 
  * Phase 4: Backend & Database Development (Step 1 Setup)
  * Provides health and API information routes with Supabase status placeholders.
- * Gemini evaluation is not implemented or connected in this server yet.
+ * Answer evaluation uses a deterministic rubric-based evaluator (no Gemini required).
  */
 
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -17,18 +18,34 @@ const { getSupabaseStatus, checkSupabaseConnectivity, getSupabaseAdmin } = requi
 const { createCatalogService } = require('./services/catalogService');
 const { createGameService } = require('./services/gameService');
 const { createContentService } = require('./services/contentService');
-const { createGeminiService } = require('./services/gemini');
+const { createRubricEvaluatorService } = require('./services/rubricEvaluator');
 const { createApiRouter } = require('./routes/apiRoutes');
 const { HttpError } = require('./middleware/httpError');
 
 function createApp({ catalogService = createCatalogService(), gameService = createGameService(),
-  contentService = createContentService(), geminiService = createGeminiService(), authenticate, connectivityCheck = checkSupabaseConnectivity, adminClientFactory = getSupabaseAdmin } = {}) {
+  contentService = createContentService(), evaluatorService = createRubricEvaluatorService(), authenticate, connectivityCheck = checkSupabaseConnectivity, adminClientFactory = getSupabaseAdmin } = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());
   app.use(morgan(config.nodeEnv === 'development' ? 'dev' : 'combined'));
   app.use(express.json({ limit: '100kb' }));
   app.use(express.urlencoded({ extended: false, limit: '100kb' }));
+
+  // Serve static frontend assets from named subdirectories only.
+  // SECURITY: Only the specific public-facing subdirectories (css, js, assets) are exposed.
+  // The server/ directory (.env, node_modules, src/, migrations) is never served statically.
+  // index: false is set on all mounts so no directory listing or implicit index.html is served.
+  const frontendRoot = path.join(__dirname, '..', '..');
+  app.use('/css',    express.static(path.join(frontendRoot, 'css'),    { index: false }));
+  app.use('/js',     express.static(path.join(frontendRoot, 'js'),     { index: false }));
+  app.use('/assets', express.static(path.join(frontendRoot, 'assets'), { index: false }));
+
+  // Explicit named HTML routes — no wildcard, no directory traversal possible.
+  app.get('/dashboard',      (_req, res) => res.sendFile(path.join(frontendRoot, 'dashboard.html')));
+  app.get('/dashboard.html', (_req, res) => res.sendFile(path.join(frontendRoot, 'dashboard.html')));
+  app.get('/teacher',        (_req, res) => res.sendFile(path.join(frontendRoot, 'dashboard.html')));
+  app.get('/admin',          (_req, res) => res.sendFile(path.join(frontendRoot, 'dashboard.html')));
+
   app.use(cors({
     origin: (origin, callback) => {
       if (!origin || config.nodeEnv === 'development' || config.frontendOrigin.includes(origin)) return callback(null, true);
@@ -59,7 +76,7 @@ function createApp({ catalogService = createCatalogService(), gameService = crea
     timestamp: new Date().toISOString()
   }));
 
-  app.use('/api/v1', createApiRouter({ catalogService, gameService, contentService, geminiService, authenticate, adminClientFactory }));
+  app.use('/api/v1', createApiRouter({ catalogService, gameService, contentService, evaluatorService, authenticate, adminClientFactory }));
 
   app.use((req, _res, next) => next(new HttpError(404, 'NOT_FOUND', `Route not found: ${req.method} ${req.path}`)));
   app.use((error, _req, res, _next) => {

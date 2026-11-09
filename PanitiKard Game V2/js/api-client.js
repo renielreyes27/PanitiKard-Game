@@ -1,16 +1,17 @@
 /**
  * ==============================================================================
- * PanitiKard V2 - Frontend API Client (Phase 5.1 Foundation)
+ * PanitiKard V2 - Frontend API Client
  * ==============================================================================
- * 
+ *
  * Secure, credential-free API client integration for PanitiKard V2.
- * 
+ *
  * Security and Preservation Rules:
- * - Never exposes or stores Gemini API keys in client-side code.
+ * - Never exposes or stores API keys in client-side code.
  * - Communicates with the PanitiKard Express backend via authenticated JWT bearer token.
  * - Protects the existing 7-card scoring system and preserves Reverse Round behavior.
  * - Always falls back to `PANITIKARD_ANSWER_EVALUATOR` when offline or when backend
  *   is unavailable, ensuring uninterrupted classroom gameplay.
+ * - Backend evaluation is fully deterministic — no external AI or Gemini API required.
  */
 (function (root) {
   "use strict";
@@ -25,42 +26,54 @@
 
   /**
    * Evaluates a student's written response (Statement, Correction, open-ended cards).
-   * Communicates with backend Gemini semantic evaluation service.
-   * If Gemini is unavailable, fails closed with clear error to prevent false AI evaluation
-   * and unearned points. Local fallback is strictly restricted to explicit offline dev mode.
+   * Communicates with the backend deterministic rubric-based evaluator.
+   * If the backend is unavailable, fails closed with a clear error to prevent false
+   * evaluation and unearned points. Local fallback is strictly restricted to explicit
+   * offline dev mode only.
    */
   async function evaluateWrittenAnswer({ questionCode, studentAnswer, cardData = {}, sessionId = null, allowOfflineDevFallback = false }) {
     const gameApi = getGameApi();
     const localEvaluator = getLocalEvaluator();
     const pointsPossible = typeof cardData.points === 'number' ? cardData.points : 1;
 
-    // 1. Attempt Backend AI Semantic Evaluation if configured and authenticated
-    if (gameApi && gameApi.enabled && gameApi.hasAccessToken && gameApi.hasAccessToken()) {
+    // 1. Attempt Backend Rubric Evaluation if configured and authenticated (or active guest session)
+    const hasActiveToken = (typeof gameApi?.hasAccessToken === 'function' && gameApi.hasAccessToken()) ||
+      (typeof gameApi?.hasSessionToken === 'function' && gameApi.hasSessionToken()) ||
+      Boolean(sessionId);
+
+    if (gameApi && gameApi.enabled && hasActiveToken) {
       try {
-        const aiResponse = await gameApi.evaluateWithGemini(questionCode, studentAnswer, { sessionId });
-        if (aiResponse && typeof aiResponse.isSemanticMatch === 'boolean') {
-          const rawPoints = typeof aiResponse.pointsEarned === 'number'
-            ? aiResponse.pointsEarned
-            : (aiResponse.isSemanticMatch ? pointsPossible : 0);
+        const evaluateFn = typeof gameApi.evaluateAnswer === 'function'
+          ? gameApi.evaluateAnswer.bind(gameApi)
+          : (typeof gameApi.evaluateWithGemini === 'function' ? gameApi.evaluateWithGemini.bind(gameApi) : null);
+        if (!evaluateFn) throw new Error('Evaluation function unavailable on gameApi');
+        const evalResponse = await evaluateFn(questionCode, studentAnswer, { sessionId });
+        if (evalResponse && typeof evalResponse.isSemanticMatch === 'boolean') {
+          const rawPoints = typeof evalResponse.pointsEarned === 'number'
+            ? evalResponse.pointsEarned
+            : (evalResponse.isSemanticMatch ? pointsPossible : 0);
           const pointsEarned = Math.min(pointsPossible, Math.max(0, rawPoints));
+
+          const defaultMethod = (evalResponse.model && String(evalResponse.model).includes('gemini')) ? 'gemini_ai' : 'deterministic_rubric';
+          const defaultSource = (evalResponse.model && String(evalResponse.model).includes('gemini')) ? 'backend_gemini' : 'backend_rubric';
 
           return {
             success: true,
             available: true,
-            isCorrect: aiResponse.isSemanticMatch,
+            isCorrect: evalResponse.isSemanticMatch,
             pointsEarned,
             maxPoints: pointsPossible,
-            feedback: aiResponse.feedback || '',
-            semanticScore: aiResponse.semanticScore ?? (aiResponse.isSemanticMatch ? 1.0 : 0.0),
-            confidenceScore: aiResponse.confidenceScore ?? null,
-            criteriaEvaluation: aiResponse.criteriaEvaluation || [],
-            evaluationMethod: 'gemini_ai',
-            model: aiResponse.model || 'gemini-3.5-flash-lite',
-            source: 'backend_gemini'
+            feedback: evalResponse.feedback || '',
+            semanticScore: evalResponse.semanticScore ?? (evalResponse.isSemanticMatch ? 1.0 : 0.0),
+            confidenceScore: evalResponse.confidenceScore ?? null,
+            criteriaEvaluation: evalResponse.criteriaEvaluation || [],
+            evaluationMethod: evalResponse.evaluationMethod || defaultMethod,
+            model: evalResponse.model || 'deterministic_rubric_v1',
+            source: evalResponse.source || defaultSource
           };
         }
       } catch (err) {
-        console.warn('[ApiClient] Backend AI evaluation unavailable:', err.message);
+        console.warn('[ApiClient] Backend evaluation unavailable:', err.message);
         if (!allowOfflineDevFallback) {
           return {
             success: false,
@@ -68,11 +81,11 @@
             isCorrect: false,
             pointsEarned: 0,
             maxPoints: pointsPossible,
-            feedback: 'Hindi maabot ang serbisyo ng Gemini AI para sa pagsusuri. Pakisubukang muli.',
+            feedback: 'Hindi maabot ang serbisyo ng pagsusuri. Pakisubukang muli.',
             error: err.message,
-            errorCode: 'GEMINI_UNAVAILABLE',
+            errorCode: 'EVALUATOR_UNAVAILABLE',
             evaluationMethod: 'unavailable',
-            source: 'backend_gemini_unavailable'
+            source: 'backend_rubric_unavailable'
           };
         }
       }
@@ -85,9 +98,9 @@
         maxPoints: pointsPossible,
         feedback: 'Hindi nakakonekta ang sesyon sa serbisyo ng pagsusuri. Pakisubukang muli.',
         error: 'AUTH_OR_API_DISABLED',
-        errorCode: 'GEMINI_UNAVAILABLE',
+        errorCode: 'EVALUATOR_UNAVAILABLE',
         evaluationMethod: 'unavailable',
-        source: 'backend_gemini_unavailable'
+        source: 'backend_rubric_unavailable'
       };
     }
 
@@ -136,36 +149,43 @@
   }
 
   /**
-   * Retrieves the backend Gemini service status without exposing credentials.
+   * Retrieves the backend evaluation service status.
    */
-  async function getGeminiEvaluationStatus() {
+  async function getEvaluationStatus() {
     const gameApi = getGameApi();
     if (!gameApi || !gameApi.enabled) {
       return {
         configured: false,
-        provider: 'Google Gemini',
-        phase: '5.2-actual-gemini',
+        provider: 'PanitiKard Deterministic Rubric Evaluator',
+        phase: 'deterministic-rubric-v1',
         status: 'unconfigured'
       };
     }
 
     try {
-      const status = await gameApi.getGeminiStatus();
-      return status || { configured: false, phase: '5.2-actual-gemini', status: 'unconfigured' };
+      const status = await gameApi.getEvaluationStatus();
+      return status || { configured: false, phase: 'deterministic-rubric-v1', status: 'unconfigured' };
     } catch (err) {
       return {
         configured: false,
         error: err.message,
-        phase: '5.2-actual-gemini',
-        status: 'provider_error'
+        phase: 'deterministic-rubric-v1',
+        status: 'unavailable'
       };
     }
   }
 
   /**
+   * @deprecated Use getEvaluationStatus() instead. Kept for backward compat.
+   */
+  async function getGeminiEvaluationStatus() {
+    return getEvaluationStatus();
+  }
+
+  /**
    * Validates the official RPC response from submit_game_answer.
    * Rejects missing, malformed, incomplete, non-numeric, or negative scores.
-   * Ensures official scoring NEVER falls back to Gemini evaluation.
+   * Ensures official scoring NEVER falls back to evaluator results.
    */
   function validateOfficialRpcResponse(officialRecord) {
     if (!officialRecord || typeof officialRecord !== 'object') {
@@ -196,7 +216,8 @@
 
   const apiClient = {
     evaluateWrittenAnswer,
-    getGeminiEvaluationStatus,
+    getEvaluationStatus,
+    getGeminiEvaluationStatus, // backward-compat alias
     validateOfficialRpcResponse
   };
 

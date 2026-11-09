@@ -119,7 +119,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const teacherModal = document.getElementById("teacher-modal");
   const btnCloseTeacherModal = document.getElementById("btn-close-teacher-modal");
   const btnTeacherModalCancel = document.getElementById("btn-teacher-modal-cancel");
-  const btnTeacherToStudent = document.getElementById("btn-teacher-to-student");
+  const teacherLoginForm = document.getElementById("teacher-login-form");
+  const teacherEmailInput = document.getElementById("teacher-login-email");
+  const teacherPasswordInput = document.getElementById("teacher-login-password");
+  const btnTeacherLoginSubmit = document.getElementById("btn-teacher-login-submit");
+  const teacherModalAlert = document.getElementById("teacher-modal-alert");
 
   // Screen 2: Student Setup Elements
   const setupForm = document.getElementById("setup-form");
@@ -275,6 +279,189 @@ document.addEventListener("DOMContentLoaded", () => {
   // Active visible screen reference
   let currentScreen = screens.welcome;
 
+  // ------------------------------------------------------------------------
+  // Dynamic Catalog & Question Hydration (Teacher-to-Student Flow)
+  // ------------------------------------------------------------------------
+  function mapCatalogQuestionToCard(q, index) {
+    const rawCategory = q.cardCategory || (q.questionType === "multiple_choice" ? "question" : "statement");
+    const typeMeta = (typeof PANITIKARD_CARD_TYPES !== "undefined" && PANITIKARD_CARD_TYPES[rawCategory])
+      ? PANITIKARD_CARD_TYPES[rawCategory]
+      : {
+          id: rawCategory,
+          label: "Pagsusuri",
+          subLabel: "Card",
+          defaultPoints: 1
+        };
+
+    const rawChoices = q.dbChoices || q.choices || [];
+    const options = rawChoices.map((c, i) => {
+      const key = c.key || String.fromCharCode(65 + i);
+      return { key, text: c.text || c.label || "" };
+    });
+
+    const isMultipleChoice = options.length > 0;
+    const timeLimit = q.timeLimit || q.timeLimitSeconds || (rawCategory === "challenge" ? 30 : null);
+    const points = typeof q.points === "number" ? q.points : (typeMeta.defaultPoints ?? 1);
+
+    return {
+      id: q.code || q.id,
+      type: rawCategory,
+      v1Type: rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1),
+      number: String(index + 1).padStart(2, "0"),
+      tag: q.tag || q.categoryLabel || typeMeta.label || "Pagsusuri",
+      title: q.title || `${typeMeta.label}: ${q.tag || "Pagsusuri"}`,
+      prompt: q.prompt || "",
+      choices: isMultipleChoice ? options.map(o => o.text) : null,
+      options: options,
+      answer: q.answerKey || q.expectedAnswer || "",
+      terms: q.rubricGroups || null,
+      hint: q.hint || null,
+      timeLimit: timeLimit,
+      points: points,
+      explanation: q.explanation || "",
+      didYouKnow: q.didYouKnow || null
+    };
+  }
+
+  function mapCatalogQuestionToQuiz(q, index) {
+    const rawChoices = q.dbChoices || q.choices || [];
+    const choices = rawChoices.map((c, i) => {
+      const key = c.key || String.fromCharCode(65 + i);
+      return { key, text: c.text || c.label || "" };
+    });
+
+    return {
+      id: q.code || q.id,
+      number: index + 1,
+      category: q.categoryLabel || q.tag || "Pagsusuri",
+      questionType: q.questionType || (choices.length ? "multiple_choice" : "identification"),
+      difficulty: q.difficulty || "average",
+      points: typeof q.points === "number" ? q.points : 1,
+      question: q.prompt || "",
+      choices: choices.length ? choices : null,
+      answer: q.answerKey || q.expectedAnswer || "",
+      acceptedAnswers: q.acceptedAnswers || [],
+      explanation: q.explanation || ""
+    };
+  }
+
+  function hydrateDeckFromCatalog(topicCode, catalog) {
+    if (!catalog || !Array.isArray(catalog.questions) || catalog.questions.length === 0) return;
+    if (typeof PANITIKARD_DECKS === "undefined") return;
+
+    if (!PANITIKARD_DECKS[topicCode]) {
+      const topicTitle = catalog.topic?.title || topicCode;
+      PANITIKARD_DECKS[topicCode] = {
+        id: topicCode,
+        title: topicTitle,
+        badge: topicTitle.split(" ")[0] || "Paksa",
+        themeClass: `deck-${topicCode}`,
+        icon: "🎴",
+        accentColor: "#185b55",
+        cardCount: catalog.questions.length,
+        competency: catalog.topic?.competency || "",
+        description: catalog.topic?.description || "",
+        subtopics: [],
+        cards: [],
+        questions: []
+      };
+    }
+
+    const deck = PANITIKARD_DECKS[topicCode];
+    const questions = catalog.questions;
+
+    const hasCardCategories = questions.some(q => Boolean(q.cardCategory));
+    const isQuizTopic = topicCode === "alamat" || topicCode === "maikling-kwento" || (!hasCardCategories && questions.length > 7);
+
+    if (isQuizTopic) {
+      deck.questions = questions.map(mapCatalogQuestionToQuiz);
+      deck.cardCount = deck.questions.length;
+    } else {
+      deck.cards = questions.map(mapCatalogQuestionToCard);
+      deck.cardCount = deck.cards.length;
+    }
+  }
+
+  function renderDynamicTopicCards(topicsList) {
+    const container = document.querySelector(".topic-cards-container");
+    if (!container || !Array.isArray(topicsList)) return;
+
+    topicsList.forEach((topic) => {
+      if (!topic || !topic.code) return;
+
+      if (typeof PANITIKARD_DECKS !== "undefined" && !PANITIKARD_DECKS[topic.code]) {
+        PANITIKARD_DECKS[topic.code] = {
+          id: topic.code,
+          title: topic.title || topic.code,
+          badge: (topic.title || "Paksa").split(" ")[0],
+          themeClass: `deck-${topic.code}`,
+          icon: "🎴",
+          accentColor: "#185b55",
+          cardCount: 0,
+          competency: topic.competency || "",
+          description: topic.description || "",
+          subtopics: [],
+          cards: [],
+          questions: []
+        };
+      }
+
+      const existing = container.querySelector(`.topic-card[data-deck-id="${topic.code}"]`);
+      if (existing) {
+        const titleEl = existing.querySelector(".topic-title");
+        if (titleEl && topic.title) titleEl.textContent = topic.title;
+        const subEl = existing.querySelector(".topic-subtitle");
+        if (subEl && (topic.description || topic.competency)) {
+          subEl.textContent = topic.description || topic.competency;
+        }
+        return;
+      }
+
+      const row = document.createElement("div");
+      row.className = "topic-row topic-row-single dynamic-topic-row";
+      row.setAttribute("data-dynamic-topic", topic.code);
+
+      const subtitle = topic.description || topic.competency || "Mga Tanong sa Pagsusuri";
+      row.innerHTML = `
+        <div class="topic-card deck-box card-dynamic card-${topic.code}" data-deck-id="${topic.code}" role="radio" aria-checked="false"
+          tabindex="0" aria-label="Paksa: ${escapeHtml(topic.title || topic.code)}.">
+          <span class="topic-corner corner-tl">01✦</span>
+          <span class="topic-corner corner-br">✦10</span>
+          <div class="topic-diagonal-band">
+            <h2 class="topic-title">${escapeHtml(topic.title || topic.code)}</h2>
+            <p class="topic-subtitle">${escapeHtml(subtitle)}</p>
+          </div>
+        </div>
+      `;
+
+      const box = row.querySelector(".topic-card");
+      if (box) {
+        box.addEventListener("click", () => handleTopicSelection(topic.code));
+        box.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            handleTopicSelection(topic.code);
+          }
+        });
+      }
+
+      container.appendChild(row);
+    });
+  }
+
+  async function loadRemoteCatalog() {
+    const api = window.PANITIKARD_GAME_API;
+    if (!api || !api.enabled || typeof api.listTopics !== "function") return;
+    try {
+      const topics = await api.listTopics();
+      if (Array.isArray(topics) && topics.length > 0) {
+        renderDynamicTopicCards(topics);
+      }
+    } catch (err) {
+      console.warn("[Catalog] Unable to load published topics from server:", err.message);
+    }
+  }
+
   // Optional backend persistence is active only when an authenticated token and API URL exist.
   // The standalone classroom flow remains fully playable without either configuration.
   function beginRemoteGameSession(topicCode, mode) {
@@ -283,7 +470,7 @@ document.addEventListener("DOMContentLoaded", () => {
     appState.remoteSessionPromise = null;
     appState.remoteWriteQueue = Promise.resolve();
     const api = window.PANITIKARD_GAME_API;
-    if (!api || !api.enabled || !api.hasAccessToken()) return;
+    if (!api || !api.enabled) return;
     const generation = ++appState.remoteSessionGeneration;
     appState.remoteSessionPromise = Promise.all([
       api.listQuestions(topicCode, mode === "quiz" ? "quiz" : "cards"),
@@ -292,6 +479,12 @@ document.addEventListener("DOMContentLoaded", () => {
       if (generation !== appState.remoteSessionGeneration) return;
       appState.remoteQuestionCatalog = catalog;
       appState.remoteSessionId = session && session.id;
+      if (session && session.sessionToken && typeof api.setGuestToken === 'function') {
+        api.setGuestToken(session.sessionToken);
+      }
+      if (catalog && Array.isArray(catalog.questions) && catalog.questions.length > 0) {
+        hydrateDeckFromCatalog(topicCode, catalog);
+      }
       return { session, catalog };
     }).catch((error) => {
       if (generation === appState.remoteSessionGeneration) {
@@ -322,6 +515,19 @@ document.addEventListener("DOMContentLoaded", () => {
       return null;
     });
     return writeTask;
+  }
+
+  function startRemoteTimer(questionCode, round = "main") {
+    const api = window.PANITIKARD_GAME_API;
+    const sessionPromise = appState.remoteSessionPromise;
+    if (!api || !sessionPromise || typeof api.startQuestionTimer !== "function") return Promise.resolve(null);
+    return sessionPromise.then(remote => {
+      if (!remote?.session?.id) return null;
+      return api.startQuestionTimer(remote.session.id, questionCode, round);
+    }).catch(err => {
+      console.warn("[Timer] Failed to record timer start on server:", err.message);
+      return null;
+    });
   }
 
   function finishRemoteGameSession() {
@@ -451,29 +657,101 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  function showTeacherModalAlert(msg, type = "error") {
+    if (!teacherModalAlert) return;
+    teacherModalAlert.textContent = msg;
+    teacherModalAlert.className = `modal-auth-alert ${type}`;
+    teacherModalAlert.style.display = "block";
+    teacherModalAlert.classList.remove("hidden");
+  }
+
+  function hideTeacherModalAlert() {
+    if (!teacherModalAlert) return;
+    teacherModalAlert.textContent = "";
+    teacherModalAlert.className = "modal-auth-alert hidden";
+    teacherModalAlert.style.display = "none";
+  }
+
+  function closeTeacherModal() {
+    if (teacherModal) teacherModal.classList.add("hidden");
+    hideTeacherModalAlert();
+    if (teacherLoginForm) teacherLoginForm.reset();
+  }
+
+  function openTeacherModal() {
+    if (teacherModal) {
+      hideTeacherModalAlert();
+      if (teacherLoginForm) teacherLoginForm.reset();
+      teacherModal.classList.remove("hidden");
+      if (teacherEmailInput) {
+        setTimeout(() => teacherEmailInput.focus(), 60);
+      }
+    }
+  }
+
   if (btnWelcomeTeacher) {
-    btnWelcomeTeacher.addEventListener("click", () => {
-      if (teacherModal) teacherModal.classList.remove("hidden");
-    });
+    btnWelcomeTeacher.addEventListener("click", openTeacherModal);
   }
 
   if (btnCloseTeacherModal) {
-    btnCloseTeacherModal.addEventListener("click", () => {
-      if (teacherModal) teacherModal.classList.add("hidden");
-    });
+    btnCloseTeacherModal.addEventListener("click", closeTeacherModal);
   }
 
   if (btnTeacherModalCancel) {
-    btnTeacherModalCancel.addEventListener("click", () => {
-      if (teacherModal) teacherModal.classList.add("hidden");
+    btnTeacherModalCancel.addEventListener("click", closeTeacherModal);
+  }
+
+  if (teacherModal) {
+    teacherModal.addEventListener("click", (e) => {
+      if (e.target === teacherModal) closeTeacherModal();
     });
   }
 
-  if (btnTeacherToStudent) {
-    btnTeacherToStudent.addEventListener("click", () => {
-      if (teacherModal) teacherModal.classList.add("hidden");
-      navigateToScreen(screens.setup);
-      if (studentNameInput) studentNameInput.focus();
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && teacherModal && !teacherModal.classList.contains("hidden")) {
+      closeTeacherModal();
+    }
+  });
+
+  if (teacherLoginForm) {
+    teacherLoginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      hideTeacherModalAlert();
+
+      const email = (teacherEmailInput?.value || "").trim();
+      const password = (teacherPasswordInput?.value || "").trim();
+
+      if (!email || !password) {
+        showTeacherModalAlert("Pakilagay ang email at password.");
+        return;
+      }
+
+      const auth = window.PANITIKARD_DASHBOARD_AUTH;
+      if (!auth || typeof auth.signIn !== "function") {
+        showTeacherModalAlert("Hindi ma-load ang authentication service. Pakisubukang i-reload ang pahina.");
+        return;
+      }
+
+      if (btnTeacherLoginSubmit) {
+        btnTeacherLoginSubmit.disabled = true;
+        btnTeacherLoginSubmit.textContent = "Sumusuri ng kredensyal...";
+      }
+
+      try {
+        const profile = await auth.signIn(email, password);
+        const roleLabel = profile.role === "admin" ? "Admin" : "Guro";
+        showTeacherModalAlert(`Matagumpay na nag-sign in bilang ${roleLabel}! Binubuksan ang dashboard...`, "info");
+        setTimeout(() => {
+          window.location.href = "dashboard.html";
+        }, 300);
+      } catch (err) {
+        showTeacherModalAlert(err.message || "Maling email o password. Pakisubukang muli.");
+      } finally {
+        if (btnTeacherLoginSubmit) {
+          btnTeacherLoginSubmit.disabled = false;
+          btnTeacherLoginSubmit.textContent = "Mag-sign in";
+        }
+      }
     });
   }
 
@@ -526,6 +804,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // Transition to Topic Deck Selection
       syncActiveDeckUI(appState.activeDeckId);
+      loadRemoteCatalog();
       navigateToScreen(screens.deck);
     });
   }
@@ -582,13 +861,27 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  function handleTopicSelection(deckId) {
-    if (deckId === "alamat" || deckId === "maikling-kwento") {
-      // Immediately start the 15-question quiz
+  async function handleTopicSelection(deckId) {
+    selectDeck(deckId);
+    const api = window.PANITIKARD_GAME_API;
+    const deck = (typeof PANITIKARD_DECKS !== "undefined") ? PANITIKARD_DECKS[deckId] : null;
+
+    // If deck has no cards/questions yet and backend is enabled, fetch questions first
+    if (api && api.enabled && typeof api.listQuestions === "function" && (!deck || (!deck.cards?.length && !deck.questions?.length))) {
+      try {
+        const catalog = await api.listQuestions(deckId);
+        if (catalog && Array.isArray(catalog.questions) && catalog.questions.length > 0) {
+          hydrateDeckFromCatalog(deckId, catalog);
+        }
+      } catch (err) {
+        console.warn(`[Catalog] Failed to load questions for topic ${deckId}:`, err.message);
+      }
+    }
+
+    const currentDeck = (typeof PANITIKARD_DECKS !== "undefined") ? PANITIKARD_DECKS[deckId] : null;
+    if (deckId === "alamat" || deckId === "maikling-kwento" || (currentDeck && currentDeck.questions?.length && !currentDeck.cards?.length)) {
       startQuiz(deckId);
     } else {
-      // 7-card 3D flip card flow (elements, meaning)
-      selectDeck(deckId);
       startDeckSession();
     }
   }
@@ -700,7 +993,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (activeCatIcon) activeCatIcon.textContent = typeMeta.icon;
     if (activeCatName) activeCatName.textContent = typeMeta.label;
     if (activeCatDesc) activeCatDesc.textContent = typeMeta.unoCategory || typeMeta.subLabel;
-    if (activeCatStep) activeCatStep.textContent = `Kard ${index + 1} ng ${deck.cards.length}`;
+    if (activeCatStep) activeCatStep.textContent = `${index + 1} ng ${deck.cards.length}`;
 
     // 1. Header Badges & UNO Corner Pips
     if (frontCardNum) frontCardNum.textContent = cardData.number;
@@ -779,12 +1072,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (btnNextCard) {
+      const deck = (typeof PANITIKARD_DECKS !== "undefined") ? PANITIKARD_DECKS[appState.activeDeckId] : null;
+      const totalCards = deck?.cards?.length || 7;
       if (!isSubmitted) {
         btnNextCard.disabled = true;
         btnNextCard.innerHTML = `<span>Susunod &rarr;</span>`;
       } else {
         btnNextCard.disabled = false;
-        if (index === 6) {
+        if (index >= totalCards - 1) {
           // Check if reverse round is available
           if (!appState.reverseRoundCompleted && appState.incorrectQuestions.length > 0) {
             btnNextCard.innerHTML = `<span>Reverse Round 🔁 &rarr;</span>`;
@@ -802,7 +1097,15 @@ document.addEventListener("DOMContentLoaded", () => {
    * Updates the 7 card type tabs with active & progression locked states.
    */
   function updateTabsState(activeIndex) {
+    const deck = (typeof PANITIKARD_DECKS !== "undefined") ? PANITIKARD_DECKS[appState.activeDeckId] : null;
+    const totalCards = deck?.cards?.length || cardTypeTabs.length;
+
     cardTypeTabs.forEach((tab, i) => {
+      if (i >= totalCards) {
+        tab.style.display = "none";
+        return;
+      }
+      tab.style.display = "";
       const isLocked = i > appState.highestUnlockedIndex;
       
       if (isLocked) {
@@ -1082,10 +1385,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         const cardFeedbackMethod = document.getElementById("card-feedback-method");
         if (cardFeedbackMethod) {
-          if (submission.evaluationMethod === "gemini_ai" || submission.source === "backend_gemini") {
-            cardFeedbackMethod.textContent = "Sinuri gamit ang Gemini AI Semantic Evaluation.";
+          if (submission.evaluationMethod === "deterministic_rubric" || submission.source === "backend_rubric") {
+            cardFeedbackMethod.textContent = "Sinuri gamit ang PanitiKard Rubric Evaluator.";
+          } else if (submission.evaluationMethod === "gemini_ai" || submission.source === "backend_gemini") {
+            cardFeedbackMethod.textContent = "Sinuri gamit ang PanitiKard Semantic Evaluation.";
           } else {
-            cardFeedbackMethod.textContent = "Sinuri batay sa itinakdang sagot at pamantayan; walang AI service na nakakonekta.";
+            cardFeedbackMethod.textContent = "Sinuri batay sa itinakdang sagot at pamantayan.";
           }
         }
       } else {
@@ -1206,6 +1511,15 @@ document.addEventListener("DOMContentLoaded", () => {
       textarea.disabled = true;
     }
 
+    // Determine whether a backend is configured for this deployment.
+    // This is based solely on whether the API base URL is set and the API is enabled —
+    // NOT on whether a session was successfully created. If the backend is configured but
+    // session creation failed, we must NOT fall back to local scoring (fail-closed).
+    const backendConfigured = Boolean(
+      window.PANITIKARD_GAME_API &&
+      window.PANITIKARD_GAME_API.enabled
+    );
+
     let evalResult;
     try {
       if (isTimeout) {
@@ -1224,7 +1538,9 @@ document.addEventListener("DOMContentLoaded", () => {
           questionCode: cardData.id,
           studentAnswer: answerText,
           cardData,
-          sessionId: appState.remoteSessionId || null
+          sessionId: appState.remoteSessionId || null,
+          // Allow local rubric fallback only when no backend is configured (standalone classroom mode)
+          allowOfflineDevFallback: !backendConfigured
         });
       } else {
         evalResult = {
@@ -1282,10 +1598,29 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     }
 
-    // Fail closed if Gemini AI is unavailable: do not record false success, do not award points, allow retry
+    // When backend is configured but Gemini evaluation failed: fail closed and allow retry.
+    // When no backend is configured (standalone classroom mode): continue using local evaluator result.
     if (!isTimeout && (!evalResult || evalResult.available === false || evalResult.success === false)) {
-      renderOpenCardError(evalResult?.feedback || "Hindi maabot ang Gemini AI para suriin ang iyong sagot. Pakisubukang muli ang pagsusumite.");
-      return;
+      if (backendConfigured) {
+        // Backend reachable but evaluation unavailable — keep fail-closed behavior and allow retry.
+        renderOpenCardError(evalResult?.feedback || "Hindi maabot ang serbisyo ng pagsusuri para suriin ang iyong sagot. Pakisubukang muli ang pagsusumite.");
+        return;
+      }
+      // No backend configured: use local rubric evaluator result as advisory scoring.
+      // Standalone classroom mode — scoring is for formative purposes only.
+      const localEval = evaluateOpenEndedAnswer(answerText, cardData);
+      evalResult = {
+        success: true,
+        available: false,
+        isCorrect: localEval.isCorrect,
+        pointsEarned: localEval.isCorrect ? (cardData.points ?? 1) : 0,
+        maxPoints: cardData.points || 1,
+        feedback: localEval.isCorrect
+          ? "Pagsusuring Lokal: Tugma ang sagot sa pamantayan ng rubric."
+          : "Pagsusuring Lokal: Hindi naabot ang mga pamantayan ng rubric.",
+        evaluationMethod: localEval.evaluationMethod || "local_rubric",
+        criteriaEvaluation: []
+      };
     }
 
     // Persist to authoritative backend session via submit_game_answer
@@ -1298,8 +1633,9 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Require a valid official RPC response containing valid pointsAwarded and isCorrect fields.
-    // Official score MUST come strictly from submit_game_answer; never fall back to Gemini's score.
+    // Require a valid official RPC response when a backend session is active.
+    // When no backend is configured (standalone classroom mode), officialRecord is null and
+    // we fall back to the local evaluator result — this is intentional and preserved.
     const rawPoints = typeof officialRecord?.pointsAwarded === "number"
       ? officialRecord.pointsAwarded
       : (typeof officialRecord?.answer?.pointsAwarded === "number" ? officialRecord.answer.pointsAwarded : null);
@@ -1314,14 +1650,18 @@ document.addEventListener("DOMContentLoaded", () => {
       rawPoints >= 0 &&
       rawCorrect !== null;
 
-    if (!isOfficialValid) {
+    // Backend session active but RPC response is invalid — fail closed and allow retry.
+    // Standalone offline mode: officialRecord is null — use local evaluator result.
+    if (!isOfficialValid && backendConfigured) {
       console.warn("[Main] Missing or invalid official RPC response from submit_game_answer:", officialRecord);
       renderOpenCardError("Hindi natanggap ang wastong opisyal na marka mula sa database. Pakisubukang muli.");
       return;
     }
 
-    const authoritativePoints = rawPoints;
-    const authoritativeCorrect = rawCorrect;
+    // Official score from submit_game_answer (backend) takes strict precedence.
+    // In standalone offline mode, evalResult provides the local rubric score.
+    const authoritativePoints = isOfficialValid ? rawPoints : evalResult.pointsEarned;
+    const authoritativeCorrect = isOfficialValid ? rawCorrect : evalResult.isCorrect;
 
     appState.answers[cardData.id] = {
       cardId: cardData.id,
@@ -1341,7 +1681,7 @@ document.addEventListener("DOMContentLoaded", () => {
       semanticScore: evalResult.semanticScore ?? null,
       confidenceScore: evalResult.confidenceScore ?? null,
       criteriaEvaluation: evalResult.criteriaEvaluation || [],
-      evaluationMethod: officialRecord.evaluationMethod || officialRecord.answer?.evaluationMethod || "submit_game_answer",
+      evaluationMethod: officialRecord?.evaluationMethod || officialRecord?.answer?.evaluationMethod || evalResult.evaluationMethod || "submit_game_answer",
       evaluationContext: {
         question: cardData.prompt,
         expectedAnswer: cardData.answer,
@@ -1392,6 +1732,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!preserveRemaining || appState.challengeSecondsRemaining <= 0) {
       appState.challengeSecondsRemaining = cardData.timeLimit || 30;
+      startRemoteTimer(cardData.id, "main");
     }
     if (timerSeconds) {
       timerSeconds.textContent = String(appState.challengeSecondsRemaining);
@@ -1497,11 +1838,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (btnNextCard) {
     btnNextCard.addEventListener("click", () => {
-      const currentCard = PANITIKARD_DECKS[appState.activeDeckId].cards[appState.activeCardTypeIndex];
-      const isSubmitted = !!appState.answers[currentCard.id];
+      const deck = (typeof PANITIKARD_DECKS !== "undefined") ? PANITIKARD_DECKS[appState.activeDeckId] : null;
+      if (!deck || !deck.cards) return;
+      const currentCard = deck.cards[appState.activeCardTypeIndex];
+      const isSubmitted = currentCard && !!appState.answers[currentCard.id];
       if (!isSubmitted) return;
 
-      if (appState.activeCardTypeIndex < 6) {
+      const totalCards = deck.cards.length;
+      if (appState.activeCardTypeIndex < totalCards - 1) {
         renderCardByTypeIndex(appState.activeCardTypeIndex + 1);
       } else {
         // Last card completed -> Check for Reverse Round eligibility
@@ -2063,6 +2407,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!preserveRemaining || reverseState.secondsRemaining <= 0) {
       reverseState.secondsRemaining = timeLimit;
+      startRemoteTimer(q.id, "reverse");
     }
 
     setReverseTimerVisible(true);
@@ -2527,7 +2872,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let mainRoundScore = 0;
     let mainCorrectCount = 0;
-    const maxScore = 7;
+    const maxScore = deck.cards.reduce((sum, c) => sum + (c.points ?? 1), 0) || 7;
 
     deck.cards.forEach((card) => {
       const record = appState.answers[card.id];
@@ -2542,7 +2887,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const percentage = Math.min(100, Math.round((finalTotalScore / maxScore) * 100));
 
     if (resultStudentGreeting) {
-      resultStudentGreeting.textContent = `Binabati kita, ${appState.studentName || "Mag-aaral"}! Natapos mo ang lahat ng 7 kard ng karunungan.`;
+      resultStudentGreeting.textContent = `Binabati kita, ${appState.studentName || "Mag-aaral"}! Natapos mo ang lahat ng ${deck.cards.length} kard ng karunungan.`;
     }
     if (resultScoreNum) resultScoreNum.textContent = String(finalTotalScore);
     if (resultScoreMax) resultScoreMax.textContent = String(maxScore);
@@ -2627,12 +2972,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         itemCard.innerHTML = `
           <div class="result-item-top">
-            <span class="result-item-title">
-              <span>${typeMeta.icon} Kard #${card.number}: ${typeMeta.label}</span>
-              <span class="pill-chip">${card.tag}</span>
-            </span>
+            <span class="pill-chip result-type-chip">${typeMeta.icon} ${card.type || card.tag}</span>
             <span class="result-item-points ${pointsClass}">${pointsBadgeText}</span>
           </div>
+          <h4 class="result-item-title">Kard #${card.number}: ${typeMeta.label}</h4>
 
           <p class="result-item-prompt">${escapeHtml(card.prompt)}</p>
 
@@ -2763,12 +3106,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
         itemCard.innerHTML = `
           <div class="result-item-top">
-            <span class="result-item-title">
-              <span>Tanong #${idx + 1} (${q.category || "Pampanitikan"})</span>
-              <span class="pill-chip">${q.questionType}</span>
-            </span>
+            <span class="pill-chip result-type-chip">${q.questionType}</span>
             <span class="result-item-points ${record.isCorrect ? "points-correct" : "points-missed"}">${pointsBadgeText}</span>
           </div>
+          <h4 class="result-item-title">Tanong #${idx + 1} (${q.category || "Pampanitikan"})</h4>
 
           <p class="result-item-prompt">${escapeHtml(q.question)}</p>
 
@@ -2823,14 +3164,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
       itemCard.innerHTML = `
         <div class="result-item-top">
-          <span class="result-item-title">
-            <span>🔁 Reverse Pagsubok #${revIdx + 1} (${escapeHtml(revAns.category || "Tanong")})</span>
-            <span class="pill-chip reverse-pill-chip">Ikalawang Pagkakataon</span>
-          </span>
+          <span class="pill-chip reverse-pill-chip">🔁 Ikalawang Pagkakataon</span>
           <span class="result-item-points ${revAns.isCorrect ? "points-correct" : "points-missed"}">
             ${revAns.isCorrect ? `+${revAns.pointsEarned} pt (Naitama!)` : "0 pt (Hindi Naitama)"}
           </span>
         </div>
+        <h4 class="result-item-title">Reverse Pagsubok #${revIdx + 1} (${escapeHtml(revAns.category || "Tanong")})</h4>
 
         <p class="result-item-prompt">${escapeHtml(revAns.question)}</p>
 
@@ -2887,5 +3226,20 @@ document.addEventListener("DOMContentLoaded", () => {
       stopChallengeTimer();
       navigateToScreen(screens.welcome);
     });
+  }
+
+  // ------------------------------------------------------------------------
+  // 19. Initial Remote Catalog Discovery & Test Export
+  // ------------------------------------------------------------------------
+  loadRemoteCatalog();
+
+  if (typeof window !== "undefined") {
+    window.PANITIKARD_DYNAMIC_CATALOG = {
+      mapCatalogQuestionToCard,
+      mapCatalogQuestionToQuiz,
+      hydrateDeckFromCatalog,
+      renderDynamicTopicCards,
+      loadRemoteCatalog
+    };
   }
 });

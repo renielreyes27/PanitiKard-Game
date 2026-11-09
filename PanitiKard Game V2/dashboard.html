@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="fil">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PanitiKard V2 — Dashboard ng Guro at Admin</title>
+
+  <!-- Configuration Meta Tags -->
+  <meta name="panitikard-api-base-url" content="/api/v1">
+  <meta name="panitikard-supabase-url" content="">
+  <meta name="panitikard-supabase-anon-key" content="">
+
+  <!-- Typography: Pacifico (Brand), Fraunces (Headings), Plus Jakarta Sans (UI) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600&family=Fraunces:opsz,wght@9..144,700&family=Pacifico&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Core PanitiKard Design Tokens & Dashboard Styles -->
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+</head>
+<body class="dashboard-body">
+
+  <!-- Top Navigation Bar -->
+  <header class="dashboard-topbar">
+    <div class="topbar-container">
+      <div class="topbar-left">
+        <button type="button" id="sidebar-toggle-btn" class="sidebar-toggle-btn" aria-label="Buksan ang Menu ng Dashboard" title="Menu">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+
+        <a href="/dashboard" class="brand-link">
+          <span class="brand-script">PanitiKard</span>
+          <span class="brand-badge">Dashboard</span>
+        </a>
+      </div>
+
+      <div class="topbar-right">
+        <a href="/" class="btn-game-link" title="Pumunta sa Pangunahing Laro">
+          <span>&#8592;</span>
+          <span class="btn-text">Pumunta sa Laro</span>
+        </a>
+
+        <!-- Authenticated Staff Pill -->
+        <div id="staff-identity-pill" class="user-identity-pill hidden">
+          <span id="staff-name" class="user-name-text">Guro</span>
+          <span id="staff-role" class="role-tag teacher">Teacher</span>
+        </div>
+
+        <button type="button" id="logout-btn" class="btn-logout hidden" title="Mag-sign out sa dashboard">
+          Mag-sign Out
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Initial Checking State -->
+  <div id="loading-view" class="loading-view">
+    <div class="spinner"></div>
+    <p>Sinusuri ang sesyon ng guro/admin...</p>
+  </div>
+
+  <!-- Unauthenticated Sign-in View -->
+  <div id="auth-wrapper" class="auth-wrapper hidden">
+    <div class="auth-card">
+      <div class="auth-card-header">
+        <h2>Pag-sign In ng Guro</h2>
+        <p>Ilagay ang iyong credentials upang ma-access ang pamamahala ng nilalaman at mga tanong ng PanitiKard.</p>
+      </div>
+
+      <div id="auth-alert" class="auth-alert" role="alert"></div>
+
+      <form id="login-form" novalidate>
+        <div class="form-group">
+          <label for="login-email">Email Address</label>
+          <input type="email" id="login-email" class="form-control" placeholder="guro@paaralan.edu.ph" required autocomplete="email">
+        </div>
+
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" class="form-control" placeholder="••••••••" required autocomplete="current-password">
+        </div>
+
+        <button type="submit" id="login-submit-btn" class="btn-primary">
+          Mag-sign In sa Dashboard
+        </button>
+      </form>
+
+      <div class="auth-footer-notice">
+        <strong>Proteksyon sa Pag-access:</strong> Ang dashboard na ito ay eksklusibo sa mga guro at tagapangasiwa. Ang mga mag-aaral ay hindi papayagang makapasok dito.
+      </div>
+    </div>
+  </div>
+
+  <!-- Protected Dashboard Application Scaffold -->
+  <div id="dashboard-app" class="dashboard-app-wrapper hidden">
+
+    <!-- Mobile Drawer Backdrop Overlay -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
+    <!-- Sidebar Navigation -->
+    <aside id="dashboard-sidebar" class="dashboard-sidebar">
+      <div>
+        <div class="nav-section-title">Pangunahing Menu</div>
+        <ul class="sidebar-nav-list" role="tablist">
+          <li>
+            <button type="button" class="nav-link-btn active" data-nav-target="overview" role="tab" aria-selected="true">
+              <span class="nav-icon" aria-hidden="true">&#9632;</span>
+              <span>Pangkalahatang-ideya</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-link-btn" data-nav-target="topics" role="tab" aria-selected="false">
+              <span class="nav-icon" aria-hidden="true">&#9776;</span>
+              <span>Mga Paksa (Topics)</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-link-btn" data-nav-target="questions" role="tab" aria-selected="false">
+              <span class="nav-icon" aria-hidden="true">&#63;</span>
+              <span>Mga Tanong (Questions)</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-link-btn" data-nav-target="rubrics" role="tab" aria-selected="false">
+              <span class="nav-icon" aria-hidden="true">&#9733;</span>
+              <span>Mga Rubric (Rubrics)</span>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="nav-link-btn" data-nav-target="account" role="tab" aria-selected="false">
+              <span class="nav-icon" aria-hidden="true">&#9881;</span>
+              <span>Akaunt at Profile</span>
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <div class="sidebar-footer-card">
+        <strong>PanitiKard V2</strong>
+        <span>Guro / Admin Dashboard v2.0 &bull; Role-Based Access Control</span>
+      </div>
+    </aside>
+
+    <!-- Main Content Panels -->
+    <main class="dashboard-main-content">
+
+      <!-- View 1: Dashboard Overview -->
+      <section id="view-overview" class="view-section active">
+        <div class="view-header">
+          <div class="view-title-group">
+            <h1 id="welcome-heading">Maligayang pagdating!</h1>
+            <p>Pangkalahatang katayuan ng nilalaman, mga paksa, at sistema ng pagsusuri.</p>
+          </div>
+          <div>
+            <span id="banner-role-badge" class="role-tag teacher">GURO</span>
+          </div>
+        </div>
+
+        <!-- Metric Statistics Cards -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Kabuuang Paksa</span>
+              <span class="stat-card-badge live">Live API</span>
+            </div>
+            <div id="stat-topics-count" class="stat-card-value">--</div>
+            <div id="stat-topics-desc" class="stat-card-desc">Kumukuha ng datos mula sa /admin/topics...</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Mga Tanong</span>
+              <span class="stat-card-badge placeholder">Preview</span>
+            </div>
+            <div id="stat-questions-count" class="stat-card-value">--</div>
+            <div class="stat-card-desc">Pamamahala ng mga tanong (Parating sa Phase 6.4)</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Aktibong Rubric</span>
+              <span class="stat-card-badge placeholder">Preview</span>
+            </div>
+            <div id="stat-rubrics-count" class="stat-card-value">--</div>
+            <div class="stat-card-desc">Pamantayan sa Gemini AI (Parating sa Phase 6.5)</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Seguridad ng API</span>
+              <span class="stat-card-badge live">Enforced</span>
+            </div>
+            <div class="stat-card-value" style="font-size: 1.45rem; color: #047857;">RBAC Protected</div>
+            <div class="stat-card-desc">Verified JWT Bearer + Supabase RLS</div>
+          </div>
+        </div>
+
+        <!-- Quick Actions & System Info Grid -->
+        <div class="dashboard-grid-two-col">
+          <div class="content-panel">
+            <div class="panel-header">
+              <h2>Mabilis na Aksyon</h2>
+              <span style="font-size: 0.8rem; color: var(--dash-text-muted);">Nilalaman</span>
+            </div>
+            <div class="quick-action-cards">
+              <div class="quick-card" onclick="window.PANITIKARD_DASHBOARD.switchView('topics')">
+                <div>
+                  <h3>Pamahalaan ang mga Paksa</h3>
+                  <p>Tingnan ang lahat ng paksa (Draft, Published, Archived) at i-update ang mga detalye.</p>
+                </div>
+                <span class="quick-card-btn">Buksan ang mga Paksa &rarr;</span>
+              </div>
+
+              <div class="quick-card" onclick="window.PANITIKARD_DASHBOARD.switchView('questions')">
+                <div>
+                  <h3>Pamahalaan ang mga Tanong</h3>
+                  <p>Ihanda ang mga katanungan sa card game at pagsusulit na may bersyon.</p>
+                </div>
+                <span class="quick-card-btn">Buksan ang mga Tanong &rarr;</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="content-panel">
+            <div class="panel-header">
+              <h2>Katayuan ng Sistema</h2>
+              <span style="font-size: 0.8rem; color: #047857; font-weight: 700;">Operational</span>
+            </div>
+            <ul class="system-status-list">
+              <li class="system-status-item">
+                <span>Express API Server</span>
+                <span class="status-indicator-badge ok"><span class="badge-dot"></span> Online</span>
+              </li>
+              <li class="system-status-item">
+                <span>Supabase Database</span>
+                <span class="status-indicator-badge ok"><span class="badge-dot"></span> Connected</span>
+              </li>
+              <li class="system-status-item">
+                <span>RLS Security Gate</span>
+                <span class="status-indicator-badge ok"><span class="badge-dot"></span> Active</span>
+              </li>
+              <li class="system-status-item">
+                <span>Gemini Semantic Eval</span>
+                <span class="status-indicator-badge ok"><span class="badge-dot"></span> Standby</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- View 2: Topics Management (Phase 6.4) -->
+      <section id="view-topics" class="view-section">
+        <div class="view-header">
+          <div class="view-title-group">
+            <h1>Pamamahala ng mga Paksa (Topics)</h1>
+            <p>Tingnan, lumikha, mag-edit, at maglathala ng mga paksa sa PanitiKard.</p>
+          </div>
+          <div>
+            <button type="button" id="btn-open-create-topic" class="btn-primary" style="padding: 0.55rem 1.15rem; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.4rem;">
+              <span style="font-size: 1.1rem; line-height: 1;">+</span> Lumikha ng Bagong Paksa
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="toolbar-container">
+          <div class="filter-group" role="tablist" aria-label="I-filter ang mga paksa ayon sa katayuan">
+            <button type="button" class="filter-pill-btn active" data-topic-filter="all">
+              <span>Lahat</span>
+              <span id="filter-count-all" class="filter-count-badge">0</span>
+            </button>
+            <button type="button" class="filter-pill-btn" data-topic-filter="published">
+              <span>Inilathala</span>
+              <span id="filter-count-published" class="filter-count-badge">0</span>
+            </button>
+            <button type="button" class="filter-pill-btn" data-topic-filter="draft">
+              <span>Borador</span>
+              <span id="filter-count-draft" class="filter-count-badge">0</span>
+            </button>
+            <button type="button" class="filter-pill-btn" data-topic-filter="archived">
+              <span>Naka-archive</span>
+              <span id="filter-count-archived" class="filter-count-badge">0</span>
+            </button>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div class="search-input-wrapper">
+              <svg class="search-icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input type="text" id="topic-search-input" placeholder="Maghanap ayon sa pamagat o code..." aria-label="Maghanap ng paksa">
+            </div>
+
+            <button type="button" id="btn-refresh-topics" class="btn-outline" title="I-refresh ang listahan">
+              <span>&#8635;</span> Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Feedback Alert Container -->
+        <div id="topics-alert" class="auth-alert" style="margin-bottom: 1.5rem;" role="alert"></div>
+
+        <!-- Topics Table Wrapper -->
+        <div class="table-card-wrapper">
+          <!-- Loading Skeleton -->
+          <div id="topics-loading" class="state-box">
+            <div class="spinner" style="margin: 0 auto 1rem; border-color: rgba(24, 91, 85, 0.2); border-top-color: var(--dash-primary);"></div>
+            <p>Ikinakarga ang mga paksa mula sa database...</p>
+          </div>
+
+          <!-- Empty State -->
+          <div id="topics-empty" class="state-box hidden">
+            <div style="font-size: 2.5rem; color: var(--dash-text-light); margin-bottom: 0.5rem;">&#128194;</div>
+            <h3>Walang Nahanap na Paksa</h3>
+            <p id="topics-empty-desc">Wala pang nakatalang paksa sa kategoryang ito.</p>
+            <button type="button" class="btn-primary" style="max-width: 240px; margin: 0 auto;" onclick="window.PANITIKARD_DASHBOARD.openCreateTopicModal()">
+              Lumikha ng Unang Paksa
+            </button>
+          </div>
+
+          <!-- Data Table -->
+          <table id="topics-table" class="topics-table hidden">
+            <thead>
+              <tr>
+                <th style="width: 32%;">Paksa (Pamagat at Code)</th>
+                <th style="width: 28%;">Kakayahan (Competency)</th>
+                <th style="width: 14%;">Katayuan</th>
+                <th style="width: 12%;">Na-update</th>
+                <th style="width: 14%; text-align: right;">Mga Aksyon</th>
+              </tr>
+            </thead>
+            <tbody id="topics-tbody">
+              <!-- Dynamically populated by js/dashboard.js -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- View 3: Questions Management (Phase 6.5) -->
+      <section id="view-questions" class="view-section">
+        <div class="view-header">
+          <div class="view-title-group">
+            <h1>Pamamahala ng mga Tanong (Questions)</h1>
+            <p>Lumikha ng bagong tanong, pamahalaan ang mga bersyon, at i-preview ang format ng laro.</p>
+          </div>
+          <div>
+            <button type="button" id="btn-open-create-question" class="btn-primary" style="padding: 0.55rem 1.15rem; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.4rem;">
+              <span style="font-size: 1.1rem; line-height: 1;">+</span> Lumikha ng Bagong Tanong
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="toolbar-container">
+          <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+            <div>
+              <select id="question-topic-filter" class="form-control" style="padding: 0.45rem 0.85rem; font-size: 0.85rem; width: auto; min-width: 190px;" aria-label="I-filter ayon sa Paksa">
+                <option value="all">Lahat ng Paksa (All Topics)</option>
+              </select>
+            </div>
+
+            <div>
+              <select id="question-category-filter" class="form-control" style="padding: 0.45rem 0.85rem; font-size: 0.85rem; width: auto; min-width: 170px;" aria-label="I-filter ayon sa Kategorya">
+                <option value="all">Lahat ng Kategorya</option>
+                <option value="question">Tanong (Question Card)</option>
+                <option value="statement">Pahayag (Statement Card)</option>
+                <option value="correction">Pagwawasto (Correction Card)</option>
+                <option value="bonus">Bonus Card</option>
+                <option value="reverse">Reverse Card</option>
+                <option value="help">Tulong (Help Card)</option>
+                <option value="challenge">Hamon (Challenge Card)</option>
+                <option value="quiz">Pagsusulit (Quiz Mode)</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <div class="search-input-wrapper">
+              <svg class="search-icon-svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <input type="text" id="question-search-input" placeholder="Maghanap ng tanong o code..." aria-label="Maghanap ng tanong">
+            </div>
+
+            <button type="button" id="btn-refresh-questions" class="btn-outline" title="I-refresh ang listahan ng tanong">
+              <span>&#8635;</span> Refresh
+            </button>
+          </div>
+        </div>
+
+        <!-- Feedback Alert Container -->
+        <div id="questions-alert" class="auth-alert" style="margin-bottom: 1.5rem;" role="alert"></div>
+
+        <!-- Questions Table Wrapper -->
+        <div class="table-card-wrapper">
+          <!-- Loading Skeleton -->
+          <div id="questions-loading" class="state-box">
+            <div class="spinner" style="margin: 0 auto 1rem; border-color: rgba(24, 91, 85, 0.2); border-top-color: var(--dash-primary);"></div>
+            <p>Ikinakarga ang mga tanong mula sa database...</p>
+          </div>
+
+          <!-- Empty State -->
+          <div id="questions-empty" class="state-box hidden">
+            <div style="font-size: 2.5rem; color: var(--dash-text-light); margin-bottom: 0.5rem;">&#128196;</div>
+            <h3>Walang Nahanap na Tanong</h3>
+            <p id="questions-empty-desc">Wala pang nakatalang tanong sa napiling filter.</p>
+            <button type="button" class="btn-primary" style="max-width: 240px; margin: 0 auto;" onclick="window.PANITIKARD_DASHBOARD.openCreateQuestionModal()">
+              Lumikha ng Unang Tanong
+            </button>
+          </div>
+
+          <!-- Data Table -->
+          <table id="questions-table" class="topics-table hidden">
+            <thead>
+              <tr>
+                <th style="width: 32%;">Tanong (Prompt at Pamagat)</th>
+                <th style="width: 14%;">Kategorya at Uri</th>
+                <th style="width: 16%;">Paksa</th>
+                <th style="width: 10%;">Puntos</th>
+                <th style="width: 8%;">Bersyon</th>
+                <th style="width: 8%;">Katayuan</th>
+                <th style="width: 12%; text-align: right;">Mga Aksyon</th>
+              </tr>
+            </thead>
+            <tbody id="questions-tbody">
+              <!-- Dynamically populated by js/dashboard.js -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- View 3b: Rubric Management (Phase 6.6) -->
+      <section id="view-rubrics" class="view-section">
+        <div class="view-header">
+          <div class="view-title-group">
+            <h1>Mga Rubric ng Pagsusuri</h1>
+            <p>Mga pamantayan ng guro para sa semantikong pagsusuri ng mga sagot ng mag-aaral. Ang bawat rubric ay nakatali sa isang tiyak na bersyon ng tanong at hindi na mababago.</p>
+          </div>
+        </div>
+
+        <!-- Architecture Notice -->
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--dash-radius-md); padding: 0.75rem 1rem; margin-bottom: 1.25rem; font-size: 0.82rem; color: #1e40af; line-height: 1.5;">
+          <strong>&#9432; Tungkol sa Mga Rubric:</strong>
+          Ang bawat rubric ay awtomatikong nililikha kapag gumawa o nag-revise ng tanong at permanenteng nakatali sa isang tiyak na bersyon ng tanong.
+          Upang <strong>baguhin ang rubric</strong>, i-revise ang tanong mula sa tab na <em>Mga Tanong</em> &#8212; lilikha ito ng bagong bersyon na may bagong rubric nang hindi binabago ang mga nakaraang rekord ng pagsusuri.
+        </div>
+
+        <!-- Rubric Toolbar -->
+        <div class="topics-toolbar" style="margin-bottom: 1rem;">
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; flex: 1;">
+            <select id="rubric-topic-filter" class="form-control" style="max-width: 200px; min-width: 150px;">
+              <option value="all">Lahat ng Paksa</option>
+            </select>
+            <select id="rubric-status-filter" class="form-control" style="max-width: 200px;">
+              <option value="all">Lahat ng Status</option>
+              <option value="with_rubric">May Rubric</option>
+              <option value="missing_rubric">Walang Rubric</option>
+              <option value="active">Aktibo (Hindi Naka-archive)</option>
+              <option value="archived">Naka-archive</option>
+            </select>
+            <input type="text" id="rubric-search" class="form-control" placeholder="Hanapin ang tanong o code..." style="max-width: 240px;" autocomplete="off">
+            <button type="button" id="btn-refresh-rubrics" class="btn-outline" style="white-space: nowrap;">&#8635; I-refresh</button>
+          </div>
+        </div>
+
+        <!-- Rubrics Loading State -->
+        <div id="rubrics-loading" class="hidden">
+          <div class="topics-skeleton">
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+            <div class="skeleton-row"></div>
+          </div>
+        </div>
+
+        <!-- Rubrics Empty State -->
+        <div id="rubrics-empty" class="topics-empty hidden">
+          <div>&#9733;</div>
+          <h3>Walang nahanap na rubric</h3>
+          <p>Walang rubric ang tumugma sa iyong filter. Gumawa ng mga tanong na may rubric mula sa tab na <em>Mga Tanong</em>.</p>
+        </div>
+
+        <!-- Rubrics Table -->
+        <div class="topics-table-wrapper">
+          <table class="topics-table" id="rubrics-table">
+            <thead>
+              <tr>
+                <th>Tanong (Code / Prompt)</th>
+                <th>Paksa</th>
+                <th>Uri</th>
+                <th>Bersyon</th>
+                <th>Rubric</th>
+                <th>Mga Grupo</th>
+                <th>Aksyon</th>
+              </tr>
+            </thead>
+            <tbody id="rubrics-tbody">
+              <!-- Dynamically populated by js/dashboard.js -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- View 4: Account / Profile Details -->
+      <section id="view-account" class="view-section">        <div class="view-header">
+          <div class="view-title-group">
+            <h1>Akaunt at Profile ng Guro</h1>
+            <p>Mga detalye ng awtorisadong sesyon at impormasyon ng gumagamit.</p>
+          </div>
+        </div>
+
+        <div class="content-panel">
+          <div class="panel-header">
+            <h2>Impormasyon ng Gumagamit</h2>
+            <span style="font-size: 0.8rem; color: var(--dash-text-muted);">Verified Session</span>
+          </div>
+
+          <div class="account-details-grid">
+            <div class="account-detail-row">
+              <div class="account-detail-label">Pangalan / Display Name</div>
+              <div id="account-display-name" class="account-detail-val">--</div>
+            </div>
+
+            <div class="account-detail-row">
+              <div class="account-detail-label">Email Address</div>
+              <div id="account-email" class="account-detail-val">--</div>
+            </div>
+
+            <div class="account-detail-row">
+              <div class="account-detail-label">Na-verify na Papel (Role)</div>
+              <div>
+                <span id="account-role" class="role-tag teacher">Teacher</span>
+              </div>
+            </div>
+
+            <div class="account-detail-row">
+              <div class="account-detail-label">User ID (UUID)</div>
+              <div id="account-id" class="account-detail-val" style="font-family: monospace; font-size: 0.85rem;">--</div>
+            </div>
+          </div>
+
+          <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--dash-border); display: flex; justify-content: flex-end;">
+            <button type="button" id="account-logout-btn" class="btn-logout" style="padding: 0.65rem 1.25rem; font-size: 0.9rem;">
+              Mag-sign Out sa Dashboard
+            </button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Modal 1: Create Topic Modal -->
+  <div id="modal-create-topic" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-create-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-create-title">Lumikha ng Bagong Paksa</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="create" aria-label="Isara">&times;</button>
+      </div>
+      <form id="form-create-topic" novalidate>
+        <div class="modal-body">
+          <div id="create-topic-alert" class="auth-alert" style="margin-bottom: 1rem;"></div>
+
+          <div class="form-group">
+            <label for="create-topic-code">Code ng Paksa (Unique Identifier) *</label>
+            <input type="text" id="create-topic-code" class="form-control" placeholder="hal. matalinhagang-wika" required maxlength="80" autocomplete="off">
+            <div class="input-helper-text">Maliit na titik (a-z), numero (0-9), at gitling (-) lamang. Hindi na ito mababago kapag nalikha na.</div>
+            <div id="create-code-error" class="input-error-text">Wasto lamang ang maliliit na titik, numero, at gitling.</div>
+          </div>
+
+          <div class="form-group">
+            <label for="create-topic-title">Pamagat ng Paksa (Title) *</label>
+            <input type="text" id="create-topic-title" class="form-control" placeholder="hal. Matalinhagang Wika at Tayutay" required maxlength="200">
+            <div id="create-title-error" class="input-error-text">Kinakailangan ang pamagat ng paksa.</div>
+          </div>
+
+          <div class="form-group">
+            <label for="create-topic-competency">Kasanayan / Batayang Kakayahan (Competency)</label>
+            <textarea id="create-topic-competency" class="form-control" rows="2" placeholder="hal. Natutukoy ang iba't ibang uri ng tayutay sa binasang akda." maxlength="2000"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="create-topic-description">Deskripsyon (Paliwanag sa Nilalaman)</label>
+            <textarea id="create-topic-description" class="form-control" rows="3" placeholder="Maikling buod o saklaw ng mga aralin sa paksang ito." maxlength="2000"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-outline" data-close-modal="create">Kanselahin</button>
+          <button type="submit" id="btn-submit-create-topic" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem;">
+            Lumikha bilang Borador
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: Edit Topic Modal -->
+  <div id="modal-edit-topic" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-edit-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-edit-title">I-edit ang Paksa</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="edit" aria-label="Isara">&times;</button>
+      </div>
+      <form id="form-edit-topic" novalidate>
+        <div class="modal-body">
+          <div id="edit-topic-alert" class="auth-alert" style="margin-bottom: 1rem;"></div>
+
+          <input type="hidden" id="edit-topic-code">
+
+          <div class="form-group">
+            <label>Code ng Paksa</label>
+            <div>
+              <span id="edit-topic-code-badge" class="topic-code-badge">--</span>
+              <span class="input-helper-text" style="display: inline-block; margin-left: 0.5rem;">(Hindi maaaring baguhin ang code)</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-topic-title">Pamagat ng Paksa (Title) *</label>
+            <input type="text" id="edit-topic-title" class="form-control" required maxlength="200">
+            <div id="edit-title-error" class="input-error-text">Kinakailangan ang pamagat ng paksa.</div>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-topic-competency">Kasanayan / Batayang Kakayahan (Competency)</label>
+            <textarea id="edit-topic-competency" class="form-control" rows="2" maxlength="2000"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-topic-description">Deskripsyon</label>
+            <textarea id="edit-topic-description" class="form-control" rows="3" maxlength="2000"></textarea>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-outline" data-close-modal="edit">Kanselahin</button>
+          <button type="submit" id="btn-submit-edit-topic" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem;">
+            I-save ang mga Pagbabago
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 4: Create Question Modal -->
+  <div id="modal-create-question" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-create-q-title">
+    <div class="modal-card" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 id="modal-create-q-title">Lumikha ng Bagong Tanong</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="create-q" aria-label="Isara">&times;</button>
+      </div>
+      <form id="form-create-question" novalidate>
+        <div class="modal-body">
+          <div id="create-question-alert" class="auth-alert" style="margin-bottom: 1rem;"></div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="create-q-topic">Paksa (Topic) *</label>
+              <select id="create-q-topic" class="form-control" required>
+                <option value="">-- Piliin ang Paksa --</option>
+              </select>
+              <div id="create-q-topic-error" class="input-error-text">Kinakailangang pumili ng paksa.</div>
+            </div>
+
+            <div class="form-group">
+              <label for="create-q-code">Code ng Tanong (Identifier) *</label>
+              <input type="text" id="create-q-code" class="form-control" placeholder="hal. elem-tauhan-01" required maxlength="120" autocomplete="off">
+              <div class="input-helper-text">Maliit na titik, numero, at gitling lamang.</div>
+              <div id="create-q-code-error" class="input-error-text">Wasto lamang ang maliliit na titik, numero, at gitling.</div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="create-q-type">Uri ng Tanong (Question Type) *</label>
+              <select id="create-q-type" class="form-control" required>
+                <option value="multiple_choice">Maramihang Pagpipilian (Multiple Choice)</option>
+                <option value="identification">Pagtukoy (Identification)</option>
+                <option value="true_false">Tama o Mali (True or False)</option>
+                <option value="fill_in_blank">Punan ang Patlang (Fill in the Blank)</option>
+                <option value="situational">Sitwasyonal (Situational)</option>
+                <option value="open_ended">Malayang Sagot (Open-Ended)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="create-q-category">Kategorya ng Card (Card Category)</label>
+              <select id="create-q-category" class="form-control">
+                <option value="">Pagsusulit / Quiz (Walang Card Type)</option>
+                <option value="question">Tanong (Question Card)</option>
+                <option value="statement">Pahayag (Statement Card)</option>
+                <option value="correction">Pagwawasto (Correction Card)</option>
+                <option value="bonus">Bonus Card</option>
+                <option value="reverse">Reverse Card</option>
+                <option value="help">Tulong (Help Card)</option>
+                <option value="challenge">Hamon (Challenge Card)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="create-q-prompt">Katanungan o Pahayag (Prompt) *</label>
+            <textarea id="create-q-prompt" class="form-control" rows="3" placeholder="Ilagay ang teksto ng katanungan o sitwasyon..." required maxlength="4000"></textarea>
+            <div id="create-q-prompt-error" class="input-error-text">Kinakailangan ang teksto ng tanong.</div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="create-q-title">Pamagat (Title / Konsepto)</label>
+              <input type="text" id="create-q-title" class="form-control" placeholder="Maikling label (opsyonal)" maxlength="250">
+            </div>
+
+            <div class="form-group">
+              <label for="create-q-points">Puntos (Points) *</label>
+              <input type="number" id="create-q-points" class="form-control" min="0" max="100" value="1" required>
+            </div>
+
+            <div class="form-group">
+              <label for="create-q-timelimit">Palugit (Segundo)</label>
+              <input type="number" id="create-q-timelimit" class="form-control" min="1" max="3600" placeholder="30">
+            </div>
+          </div>
+
+          <!-- Dynamic Multiple Choice Options Container -->
+          <div id="create-q-choices-section" class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+              <label style="margin: 0;">Mga Pagpipilian (Choices) at Tamang Sagot *</label>
+              <button type="button" id="btn-add-choice-create" class="btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">
+                + Magdagdag ng Pagpipilian
+              </button>
+            </div>
+            <div class="input-helper-text" style="margin-bottom: 0.5rem;">Piliin ang bilog sa tabi ng tamang sagot upang markahan bilang answerKey.</div>
+            <div id="create-q-choices-list" class="choices-editor-wrapper">
+              <!-- Dynamically populated rows -->
+            </div>
+            <div id="create-q-choice-error" class="input-error-text">Dapat may kahit 2 pagpipilian at may napiling tamang sagot.</div>
+          </div>
+
+          <!-- Written Expected Answer Container (For non-multiple choice) -->
+          <div id="create-q-expected-section" class="form-group hidden">
+            <label for="create-q-expected-answer">Inaasahang Sagot / Answer Key *</label>
+            <input type="text" id="create-q-expected-answer" class="form-control" placeholder="Tamang sagot o batayang tugon..." maxlength="4000">
+            <div class="input-helper-text">Ginagamit sa pagsusuri ng sagot para sa identification o open-ended.</div>
+            <div id="create-q-expected-error" class="input-error-text">Kinakailangan ang inaasahang sagot.</div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="create-q-explanation">Paliwanag (Explanation)</label>
+              <textarea id="create-q-explanation" class="form-control" rows="2" placeholder="Paliwanag kung bakit ito ang tamang sagot..." maxlength="4000"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="create-q-hint">Pahiwatig (Hint / Tulong)</label>
+              <textarea id="create-q-hint" class="form-control" rows="2" placeholder="Pahiwatig kapag nag-reveal ang mag-aaral..." maxlength="1000"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-outline" data-close-modal="create-q">Kanselahin</button>
+          <button type="submit" id="btn-submit-create-question" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem;">
+            Lumikha bilang Borador
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 5: Edit Question Modal -->
+  <div id="modal-edit-question" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-edit-q-title">
+    <div class="modal-card" style="max-width: 680px;">
+      <div class="modal-header">
+        <h3 id="modal-edit-q-title">I-edit ang Tanong</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="edit-q" aria-label="Isara">&times;</button>
+      </div>
+      <form id="form-edit-question" novalidate>
+        <div class="modal-body">
+          <div id="edit-question-alert" class="auth-alert" style="margin-bottom: 1rem;"></div>
+
+          <!-- Architectural disclosure notice for immutable draft versions -->
+          <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--dash-radius-md); padding: 0.75rem 1rem; margin-bottom: 1.25rem; font-size: 0.8rem; color: #1e40af; line-height: 1.45;">
+            <strong>Workflow ng Borador (Draft-First):</strong> Ang pag-edit ay lilikha ng bagong bersyon (<span id="edit-q-next-version-text">Version 2</span>) bilang <em>borador</em> nang hindi agad inilalathala. Ang kasalukuyang inilathalang bersyon ay mananatiling aktibo para sa mga mag-aaral hanggang sa ikaw ay tahasang mag-click ng "I-publish".
+          </div>
+
+          <input type="hidden" id="edit-q-code">
+
+          <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap;">
+            <span id="edit-q-code-badge" class="topic-code-badge">--</span>
+            <span id="edit-q-type-badge" class="badge-type">--</span>
+            <span id="edit-q-category-badge" class="badge-category quiz">--</span>
+          </div>
+
+          <div class="form-group">
+            <label for="edit-q-prompt">Katanungan o Pahayag (Prompt) *</label>
+            <textarea id="edit-q-prompt" class="form-control" rows="3" required maxlength="4000"></textarea>
+            <div id="edit-q-prompt-error" class="input-error-text">Kinakailangan ang teksto ng tanong.</div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="edit-q-title">Pamagat (Title / Konsepto)</label>
+              <input type="text" id="edit-q-title" class="form-control" maxlength="250">
+            </div>
+
+            <div class="form-group">
+              <label for="edit-q-points">Puntos (Points) *</label>
+              <input type="number" id="edit-q-points" class="form-control" min="0" max="100" required>
+            </div>
+
+            <div class="form-group">
+              <label for="edit-q-timelimit">Palugit (Segundo)</label>
+              <input type="number" id="edit-q-timelimit" class="form-control" min="1" max="3600">
+            </div>
+          </div>
+
+          <!-- Edit Multiple Choice Choices Container -->
+          <div id="edit-q-choices-section" class="form-group">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+              <label style="margin: 0;">Mga Pagpipilian (Choices) at Tamang Sagot *</label>
+              <button type="button" id="btn-add-choice-edit" class="btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">
+                + Magdagdag ng Pagpipilian
+              </button>
+            </div>
+            <div id="edit-q-choices-list" class="choices-editor-wrapper">
+              <!-- Dynamically populated rows -->
+            </div>
+            <div id="edit-q-choice-error" class="input-error-text">Dapat may kahit 2 pagpipilian at may napiling tamang sagot.</div>
+          </div>
+
+          <!-- Edit Written Expected Answer Container -->
+          <div id="edit-q-expected-section" class="form-group hidden">
+            <label for="edit-q-expected-answer">Inaasahang Sagot / Answer Key *</label>
+            <input type="text" id="edit-q-expected-answer" class="form-control" maxlength="4000">
+            <div id="edit-q-expected-error" class="input-error-text">Kinakailangan ang inaasahang sagot.</div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="edit-q-explanation">Paliwanag (Explanation)</label>
+              <textarea id="edit-q-explanation" class="form-control" rows="2" maxlength="4000"></textarea>
+            </div>
+
+            <div class="form-group">
+              <label for="edit-q-hint">Pahiwatig (Hint / Tulong)</label>
+              <textarea id="edit-q-hint" class="form-control" rows="2" maxlength="1000"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-outline" data-close-modal="edit-q">Kanselahin</button>
+          <button type="submit" id="btn-submit-edit-question" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem;">
+            I-save bilang Bagong Borador
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 6: Question Preview Modal (Collectible Card Look with Draft Workflow) -->
+  <div id="modal-preview-question" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-preview-q-title">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3 id="modal-preview-q-title">Silip sa Format ng Laro</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="preview-q" aria-label="Isara">&times;</button>
+      </div>
+      <div class="modal-body" style="background: #f1f5f9; padding: 1.25rem 1rem;">
+        <div id="preview-version-switcher" class="preview-version-bar hidden">
+          <div class="preview-version-info">
+            <span id="preview-badge-status" class="status-badge published">Inilathala</span>
+            <span id="preview-version-label" style="font-size: 0.825rem; font-weight: 600;">Bersyon 1</span>
+          </div>
+          <div class="preview-version-buttons">
+            <button type="button" id="btn-preview-published" class="preview-version-btn active">Inilathala</button>
+            <button type="button" id="btn-preview-draft" class="preview-version-btn">Bagong Borador</button>
+          </div>
+        </div>
+        <div id="preview-card-render" class="question-card-preview">
+          <!-- Dynamically populated card preview -->
+        </div>
+      </div>
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+        <button type="button" id="btn-preview-publish-action" class="btn-action publish hidden" style="font-size: 0.85rem; padding: 0.45rem 1rem;">
+          &#10003; I-publish ang Borador na Ito
+        </button>
+        <button type="button" class="btn-primary" style="width: auto; padding: 0.5rem 1.25rem; margin-left: auto;" data-close-modal="preview-q">
+          Isara ang Preview
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 7: Rubric Preview Modal (Phase 6.6) -->
+  <div id="modal-preview-rubric" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-preview-rubric-title">
+    <div class="modal-card" style="max-width: 600px;">
+      <div class="modal-header">
+        <h3 id="modal-preview-rubric-title">Detalye ng Rubric</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="preview-rubric" aria-label="Isara">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Immutability Notice -->
+        <div style="background: #fefce8; border: 1px solid #fde68a; border-radius: var(--dash-radius-md); padding: 0.65rem 0.85rem; margin-bottom: 1rem; font-size: 0.8rem; color: #92400e; line-height: 1.4;">
+          <strong>Hindi Mababago:</strong> Ang rubric na ito ay permanenteng nakatali sa
+          <strong><span id="preview-rubric-version-label">Version 1</span></strong>
+          ng tanong at hindi na maaaring baguhin upang mapanatili ang integridad ng mga nakaraang pagsusuri ng AI.
+          Upang mag-update ng rubric, i-revise ang tanong mula sa tab na <em>Mga Tanong</em>.
+        </div>
+
+        <!-- Question Context -->
+        <div class="rubric-preview-section">
+          <div class="rubric-preview-label">Tanong</div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.5rem;">
+            <span id="preview-rubric-code-badge" class="topic-code-badge">--</span>
+            <span id="preview-rubric-type-badge" class="badge-type">--</span>
+          </div>
+          <div id="preview-rubric-prompt" class="rubric-preview-prompt">--</div>
+        </div>
+
+        <!-- Expected Answer -->
+        <div class="rubric-preview-section" id="preview-rubric-expected-section">
+          <div class="rubric-preview-label">Inaasahang Sagot / Answer Key</div>
+          <div id="preview-rubric-expected" class="rubric-preview-answer">--</div>
+        </div>
+
+        <!-- Accepted Alternatives -->
+        <div class="rubric-preview-section" id="preview-rubric-accepted-section">
+          <div class="rubric-preview-label">Tinatanggap na Alternatibong Sagot</div>
+          <div id="preview-rubric-accepted-list" class="rubric-preview-accepted"></div>
+        </div>
+
+        <!-- Rubric Groups -->
+        <div class="rubric-preview-section" id="preview-rubric-groups-section">
+          <div class="rubric-preview-label">Mga Pamantayan ng Rubric (Rubric Groups)</div>
+          <div class="rubric-preview-groups-note">
+            Para makapasa ang isang grupo, dapat maglaman ang sagot ng kahit isang keyword mula sa grupo.
+            Kailangan ng lahat ng grupo para sa buong puntos.
+          </div>
+          <div id="preview-rubric-groups-list" class="rubric-groups-list"></div>
+        </div>
+
+        <!-- No Rubric State -->
+        <div id="preview-rubric-missing" class="hidden" style="text-align: center; padding: 1.5rem; color: var(--dash-text-muted);">
+          <div style="font-size: 2rem; margin-bottom: 0.5rem;">&#9888;</div>
+          <strong>Walang Rubric</strong>
+          <p style="margin: 0.5rem 0 0; font-size: 0.85rem;">Ang tanong na ito ay walang rubric na nakalagay sa database. Maaaring gumamit ang AI ng fallback na batayan ng pagsusuri.</p>
+        </div>
+      </div>
+      <div class="modal-footer" style="justify-content: space-between;">
+        <span id="preview-rubric-meta" style="font-size: 0.75rem; color: var(--dash-text-muted);"></span>
+        <div style="display: flex; gap: 0.5rem;">
+          <button type="button" class="btn-outline" id="btn-rubric-go-to-question" style="width: auto; padding: 0.5rem 1rem;">
+            I-revise ang Tanong
+          </button>
+          <button type="button" class="btn-primary" style="width: auto; padding: 0.5rem 1.25rem;" data-close-modal="preview-rubric">
+            Isara
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 3: Action Confirmation Modal -->
+  <div id="modal-confirm-action" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-action-title">
+    <div class="modal-card" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3 id="confirm-action-title">Kumpirmahin ang Aksyon</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="confirm" aria-label="Isara">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-action-message" style="margin: 0; line-height: 1.5; color: var(--dash-text);">
+          Sigurado ka ba sa aksyong ito?
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-outline" data-close-modal="confirm">Kanselahin</button>
+        <button type="button" id="btn-execute-confirm" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem;">
+          Ituloy
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Toast Notification -->
+  <div id="toast-alert" class="toast-alert" role="status" aria-live="polite">
+    <span id="toast-message">Matagumpay na naisagawa.</span>
+  </div>
+
+  <!-- Supabase JS Client (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Dashboard JavaScript Modules -->
+  <script src="js/dashboard-auth.js"></script>
+  <script src="js/dashboard-api.js"></script>
+  <script src="js/dashboard.js"></script>
+</body>
+</html>

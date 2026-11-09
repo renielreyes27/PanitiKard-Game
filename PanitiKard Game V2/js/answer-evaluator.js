@@ -35,10 +35,48 @@
       .replace(/\s+/g, " ");
   }
 
+  const NEGATION_MARKERS = new Set(["hindi", "di", "walang", "wala", "huwag", "not", "no", "never"]);
+  const CONTRAST_MARKERS = new Set(["kundi", "ngunit", "subalit", "pero", "bagkus", "datapwat"]);
+
+  function isMatchNegated(paddedText, matchIndex) {
+    const beforeText = paddedText.slice(0, matchIndex).trim();
+    if (!beforeText) return false;
+    const prevWords = beforeText.split(/\s+/);
+    const windowWords = prevWords.slice(-3);
+    for (let i = windowWords.length - 1; i >= 0; i--) {
+      const w = windowWords[i];
+      if (CONTRAST_MARKERS.has(w)) return false;
+      if (NEGATION_MARKERS.has(w)) return true;
+    }
+    return false;
+  }
+
   function includesTerm(normalizedText, term) {
     const normalizedTerm = normalize(term);
-    if (!normalizedTerm) return false;
-    return (` ${normalizedText} `).includes(` ${normalizedTerm} `);
+    if (!normalizedTerm || !normalizedText) return false;
+    const padded = ` ${normalizedText} `;
+    const candidates = [` ${normalizedTerm} `];
+
+    if (normalizedTerm.length >= 4) {
+      if (/[aeiou]$/.test(normalizedTerm)) {
+        candidates.push(` ${normalizedTerm}ng `);
+      } else if (/n$/.test(normalizedTerm)) {
+        candidates.push(` ${normalizedTerm}g `);
+      }
+    }
+
+    for (const target of candidates) {
+      let searchFrom = 0;
+      while (searchFrom < padded.length) {
+        const idx = padded.indexOf(target, searchFrom);
+        if (idx === -1) break;
+        if (!isMatchNegated(padded, idx)) {
+          return true;
+        }
+        searchFrom = idx + 1;
+      }
+    }
+    return false;
   }
 
   function evaluateWrittenAnswer({ studentAnswer, expectedAnswer, acceptedAnswers = [], rubricGroups = [], questionId = "" }) {

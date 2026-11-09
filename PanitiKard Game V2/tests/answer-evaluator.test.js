@@ -83,3 +83,21 @@ test("quiz paraphrases must cover all question-specific rubric groups", () => {
   assert.equal(evaluateQuizAnswer(sharing, "Pagbabahagi ng pagkain sa kapwa").isCorrect, true);
   assert.equal(evaluateQuizAnswer(sharing, "mas mabilis").isCorrect, false);
 });
+
+test("contradictory negated answers are rejected while Filipino ligatures (-ng/-g) are accepted", () => {
+  const elemCorrection = PANITIKARD_DECKS.elements.cards.find(item => item.id === "elem-correction");
+  assert.equal(evaluator.evaluateWrittenAnswer({
+    studentAnswer: "Hindi magkaugnay ang tema at mensahe ng akda",
+    expectedAnswer: elemCorrection.answer,
+    rubricGroups: elemCorrection.terms,
+    questionId: elemCorrection.id
+  }).isCorrect, false);
+
+  const meanCorrection = PANITIKARD_DECKS.meaning.cards.find(item => item.id === "mean-correction");
+  assert.equal(evaluator.evaluateWrittenAnswer({
+    studentAnswer: "Ang pahiwatig ay di-tuwirang paraan ng pagpapahayag",
+    expectedAnswer: meanCorrection.answer,
+    rubricGroups: meanCorrection.terms,
+    questionId: meanCorrection.id
+  }).isCorrect, true);
+});

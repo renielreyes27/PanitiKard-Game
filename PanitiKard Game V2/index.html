@@ -7,7 +7,9 @@
   <title>PanitiKard V2 - Digital na Pagkatutong Pampanitikan</title>
   <meta name="description"
     content="PanitiKard V2 - Isang interaktibong educational card game para sa Filipino at Panitikan">
-  <meta name="panitikard-api-base-url" content="">
+  <meta name="panitikard-api-base-url" content="/api/v1">
+  <meta name="panitikard-supabase-url" content="">
+  <meta name="panitikard-supabase-anon-key" content="">
 
   <!-- Google Fonts: Pacifico (Logo Script), Caveat (Handwriting), Fraunces (Serif), & Plus Jakarta Sans (Sans) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -33,9 +35,8 @@
         <span class="header-brand-script">PanitiKard</span>
       </div>
       <div class="header-right-group">
-        <button type="button" id="header-back-btn" class="header-back-btn hidden" aria-label="Bumalik">
+        <button type="button" id="header-back-btn" class="header-back-btn hidden" aria-label="Bumalik" title="Bumalik">
           <span class="back-arrow-icon" aria-hidden="true">&#9664;</span>
-          <span class="back-btn-text">Back</span>
         </button>
       </div>
     </div>
@@ -173,31 +174,45 @@
       </div>
     </section>
 
-    <!-- Teacher / Admin Information Modal -->
+    <!-- Teacher / Admin Login Modal -->
     <div id="teacher-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true"
       aria-labelledby="teacher-modal-title">
       <div class="modal-dialog">
         <div class="modal-badge-row">
-          <span class="grade-pill-dark">Portal ng Guro &bull; Phase 4</span>
+          <span class="grade-pill-dark">Portal ng Guro &bull; PanitiKard V2</span>
           <button type="button" id="btn-close-teacher-modal" class="modal-close-btn" aria-label="Isara">&times;</button>
         </div>
         <h2 id="teacher-modal-title" class="modal-title">Portal ng Guro / Admin</h2>
         <p class="modal-body-text">
-          Ang nakalaang portal ng guro para sa pagsusuri ng mga marka at talaan ng mag-aaral ay ihahanda sa Phase 4
-          backend integration kasama ang Supabase Auth.
+          Mag-sign in gamit ang iyong authorized account upang ma-access ang dashboard.
         </p>
-        <p class="modal-sub-text">
-          Sa ngayon, maaari mong subukan at laruin ang buong educational card game bilang mag-aaral.
-        </p>
-        <div class="modal-actions">
-          <button type="button" id="btn-teacher-to-student" class="btn btn-primary">
-            <span>Pumasok bilang Mag-aaral</span>
-            <span class="btn-arrow" aria-hidden="true">&rarr;</span>
-          </button>
-          <button type="button" id="btn-teacher-modal-cancel" class="btn btn-secondary">
-            <span>Bumalik</span>
-          </button>
-        </div>
+
+        <div id="teacher-modal-alert" class="modal-auth-alert hidden" role="alert"></div>
+
+        <form id="teacher-login-form" novalidate>
+          <div class="modal-form-group">
+            <label for="teacher-login-email" class="modal-form-label">Email Address</label>
+            <input type="email" id="teacher-login-email" class="modal-form-control" placeholder="guro@paaralan.edu.ph" required autocomplete="email">
+          </div>
+
+          <div class="modal-form-group">
+            <label for="teacher-login-password" class="modal-form-label">Password</label>
+            <input type="password" id="teacher-login-password" class="modal-form-control" placeholder="••••••••" required autocomplete="current-password">
+          </div>
+
+          <p class="modal-supporting-text">
+            Para lamang sa authorized Teachers at Administrators.
+          </p>
+
+          <div class="modal-actions">
+            <button type="button" id="btn-teacher-modal-cancel" class="btn btn-secondary">
+              <span>Bumalik</span>
+            </button>
+            <button type="submit" id="btn-teacher-login-submit" class="btn btn-primary">
+              <span>Mag-sign in</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
 
@@ -289,16 +304,8 @@
 
         </div>
 
-        <!-- Accessible hidden reference and fallback controls -->
+        <!-- Accessible reference title -->
         <h2 id="deck-screen-title" class="sr-only">Pumili ng Topic Deck</h2>
-        <div class="deck-bottom-actions">
-          <button type="button" id="btn-back-to-setup" class="btn btn-secondary btn-compact">
-            <span>&larr; Bumalik sa Panimula</span>
-          </button>
-          <button type="button" id="btn-enter-deck" class="btn btn-primary hidden" aria-hidden="true">
-            <span>Buksan ang Napiling Kard</span>
-          </button>
-        </div>
 
       </div>
     </section>
@@ -441,7 +448,7 @@
             </div>
             <div class="single-category-right">
               <span id="active-cat-desc" class="single-category-desc">Kaalaman at Kahulugan</span>
-              <span id="active-cat-step" class="single-category-step-pill">Kard 1 ng 7</span>
+              <span id="active-cat-step" class="single-category-step-text">1 ng 7</span>
             </div>
           </div>
 
@@ -605,10 +612,12 @@
 
                     <div id="card-feedback-box" class="card-feedback-panel hidden" aria-live="polite">
                       <div id="card-feedback-header" class="card-feedback-head feedback-correct">
-                        <span id="card-feedback-icon" class="feedback-icon" aria-hidden="true">✓</span>
-                        <div class="feedback-title-group">
-                          <span id="card-feedback-status" class="feedback-status">TAMA!</span>
+                        <div class="feedback-points-row">
                           <span id="card-feedback-points" class="feedback-points">+1 Punto</span>
+                        </div>
+                        <div class="feedback-title-group">
+                          <span id="card-feedback-icon" class="feedback-icon" aria-hidden="true">✓</span>
+                          <span id="card-feedback-status" class="feedback-status">TAMA!</span>
                         </div>
                       </div>
                       <div class="card-feedback-body">
@@ -668,12 +677,6 @@
           <button type="button" id="btn-next-card" class="toolbar-btn btn-next-nav btn-action-purple"
             title="Susunod na Uri ng Kard">
             <span>Susunod &rarr;</span>
-          </button>
-        </div>
-
-        <div class="card-footer-nav">
-          <button type="button" id="btn-back-to-deck" class="btn btn-outline btn-compact btn-deck-return">
-            <span>&larr; Pumili ng Ibang Topic Deck</span>
           </button>
         </div>
       </div>
@@ -869,10 +872,12 @@
 
                     <div id="reverse-feedback-box" class="card-feedback-panel hidden" aria-live="polite">
                       <div id="reverse-feedback-header" class="card-feedback-head feedback-correct">
-                        <span id="reverse-feedback-icon" class="feedback-icon" aria-hidden="true">✓</span>
-                        <div class="feedback-title-group">
-                          <span id="reverse-feedback-status" class="feedback-status">TAMA SA REVERSE ROUND!</span>
+                        <div class="feedback-points-row">
                           <span id="reverse-feedback-points" class="feedback-points">+1 Punto</span>
+                        </div>
+                        <div class="feedback-title-group">
+                          <span id="reverse-feedback-icon" class="feedback-icon" aria-hidden="true">✓</span>
+                          <span id="reverse-feedback-status" class="feedback-status">TAMA SA REVERSE ROUND!</span>
                         </div>
                       </div>
                       <div class="card-feedback-body">
@@ -1035,6 +1040,12 @@
       <p class="footer-sub">HTML, CSS, at Vanilla JavaScript &bull; Walang Panlabas na Dependencies</p>
     </div>
   </footer>
+
+  <!-- Supabase JS Client (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Dashboard Authentication Module -->
+  <script src="js/dashboard-auth.js"></script>
 
   <!-- Scripts: Educational Card Data then Main Controller -->
   <script src="js/cards-data.js"></script>

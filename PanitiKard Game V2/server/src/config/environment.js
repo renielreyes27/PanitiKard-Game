@@ -15,7 +15,7 @@ const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   frontendOrigin: process.env.FRONTEND_ORIGIN
     ? process.env.FRONTEND_ORIGIN.split(',').map((o) => o.trim())
-    : ['http://localhost:5500', 'http://127.0.0.1:5500', 'http://localhost:8000'],
+    : ['http://localhost:5500', 'http://127.0.0.1:5500', 'http://localhost:8000', 'http://localhost:8080', 'http://127.0.0.1:8080'],
 
   // Supabase Configuration Placeholders (Phase 4)
   supabase: {
@@ -24,12 +24,8 @@ const config = {
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   },
 
-  // Gemini AI Configuration (Phase 5)
-  gemini: {
-    apiKey: process.env.GEMINI_API_KEY || '',
-    model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
-    timeoutMs: parseInt(process.env.GEMINI_TIMEOUT_MS, 10) || 15000
-  }
+  // Guest Session Configuration (Phase 5.6)
+  guestSessionSecret: process.env.GUEST_SESSION_SECRET || 'panitikard-guest-secret-dev-key'
 };
 
 module.exports = config;
