@@ -3587,6 +3587,10 @@ body {
   background-color: #16a34a;
 }
 
+.card-feedback-head.feedback-partial {
+  background-color: #d97706;
+}
+
 .card-feedback-head.feedback-incorrect {
   background-color: #dc2626;
 }

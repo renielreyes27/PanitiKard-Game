@@ -1,6 +1,6 @@
 /** Optional authenticated API integration. The browser only receives the user's access token. */
 (function (root) {
-  const meta = document.querySelector('meta[name="panitikard-api-base-url"]');
+  const meta = typeof document !== 'undefined' ? document.querySelector('meta[name="panitikard-api-base-url"]') : null;
   const configuredBase = root.PANITIKARD_API_BASE_URL || (meta && meta.content) || '';
   const baseUrl = configuredBase.replace(/\/+$/, '');
 
@@ -38,8 +38,18 @@
     }),
     finishSession: (sessionId) => request(`/sessions/${encodeURIComponent(sessionId)}/finish`, {
       method: 'POST', body: {}
+    }),
+    getGeminiStatus: () => request('/evaluations/gemini/status'),
+    evaluateWithGemini: (questionCode, studentAnswer, options = {}) => request('/evaluations/gemini', {
+      method: 'POST',
+      body: {
+        questionCode,
+        studentAnswer: String(studentAnswer || ''),
+        sessionId: options.sessionId || undefined
+      }
     })
   };
 
   root.PANITIKARD_GAME_API = api;
-})(window);
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+})(typeof window !== 'undefined' ? window : globalThis);

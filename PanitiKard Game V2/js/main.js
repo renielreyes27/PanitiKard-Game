@@ -51,6 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Tracking incorrectly answered questions for Reverse Round
     incorrectQuestions: [],
     reverseRoundCompleted: false,
+    isEvaluatingAnswer: false,
     remoteSessionId: null,
     remoteSessionGeneration: 0,
     remoteSessionPromise: null,
@@ -302,8 +303,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function persistRemoteAnswer(questionCode, response, round = "main", options = {}) {
     const api = window.PANITIKARD_GAME_API;
     const sessionPromise = appState.remoteSessionPromise;
-    if (!api || !sessionPromise) return;
-    appState.remoteWriteQueue = appState.remoteWriteQueue
+    if (!api || !sessionPromise) return Promise.resolve(null);
+    const writeTask = appState.remoteWriteQueue
       .then(() => sessionPromise)
       .then(remote => {
         if (!remote?.session?.id) return null;
@@ -315,10 +316,12 @@ document.addEventListener("DOMContentLoaded", () => {
           return null;
         }
         return api.submitAnswer(remote.session.id, questionCode, response, round, options);
-      })
-      .catch((error) => {
+      });
+    appState.remoteWriteQueue = writeTask.catch((error) => {
       console.warn("Unable to persist this answer to the backend.", error.message);
+      return null;
     });
+    return writeTask;
   }
 
   function finishRemoteGameSession() {
@@ -616,6 +619,7 @@ document.addEventListener("DOMContentLoaded", () => {
     appState.answers = {};
     appState.incorrectQuestions = [];
     appState.reverseRoundCompleted = false;
+    appState.isEvaluatingAnswer = false;
     appState.activeCardTypeIndex = 0;
     appState.highestUnlockedIndex = 0;
     stopChallengeTimer();
@@ -974,6 +978,10 @@ document.addEventListener("DOMContentLoaded", () => {
           });
 
           textarea.addEventListener("click", (e) => e.stopPropagation());
+          textarea.addEventListener("input", () => {
+            const errBox = document.getElementById("open-error-container");
+            if (errBox) errBox.classList.add("hidden");
+          });
           textarea.addEventListener("keydown", (e) => {
             if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
               e.preventDefault();
@@ -1037,24 +1045,48 @@ document.addEventListener("DOMContentLoaded", () => {
       if (isSubmitted && submission) {
         cardFeedbackBox.classList.remove("hidden");
         const isOk = submission.isCorrect;
+        const isPartial = submission.pointsEarned > 0 && submission.pointsEarned < (submission.maxPoints || 1);
         if (cardFeedbackHeader) {
-          cardFeedbackHeader.className = `card-feedback-head ${isOk ? "feedback-correct" : "feedback-incorrect"}`;
+          cardFeedbackHeader.className = `card-feedback-head ${isOk ? "feedback-correct" : (isPartial ? "feedback-partial" : "feedback-incorrect")}`;
         }
         if (cardFeedbackIcon) {
-          cardFeedbackIcon.textContent = isOk ? "✓" : "✗";
+          cardFeedbackIcon.textContent = isOk ? "✓" : (isPartial ? "◐" : "✗");
         }
         if (cardFeedbackStatus) {
-          cardFeedbackStatus.textContent = isOk ? "TAMA!" : (submission.isTimeout ? "NAUBOS ANG ORAS!" : "HINDI TUMUGMA");
+          cardFeedbackStatus.textContent = isPartial
+            ? "BAHAGYANG TAMA"
+            : (isOk ? "TAMA!" : (submission.isTimeout ? "NAUBOS ANG ORAS!" : "HINDI TUMUGMA"));
         }
         if (cardFeedbackPoints) {
           cardFeedbackPoints.textContent = `+${submission.pointsEarned} ${submission.pointsEarned === 1 ? "Punto" : "Puntos"}`;
         }
         if (cardFeedbackMessage) {
-          cardFeedbackMessage.textContent = submission.isTimeout
-            ? "Naubos ang oras. Walang puntos na iginawad."
-            : (isOk
-              ? "Tugma ang sagot sa inaasahang sagot at pamantayan."
-              : "Hindi naabot ng sagot ang mga pamantayang itinakda para sa tanong na ito.");
+          if (submission.aiFeedback) {
+            let msg = submission.aiFeedback;
+            if (Array.isArray(submission.criteriaEvaluation) && submission.criteriaEvaluation.length > 0) {
+              const critDetails = submission.criteriaEvaluation
+                .map(c => `• ${c.satisfied ? '✓' : '✗'} ${c.aspect}: ${c.explanation}`)
+                .join('\n');
+              msg += `\n\n${critDetails}`;
+            }
+            cardFeedbackMessage.style.whiteSpace = "pre-line";
+            cardFeedbackMessage.textContent = msg;
+          } else {
+            cardFeedbackMessage.style.whiteSpace = "normal";
+            cardFeedbackMessage.textContent = submission.isTimeout
+              ? "Naubos ang oras. Walang puntos na iginawad."
+              : (isOk
+                ? "Tugma ang sagot sa inaasahang sagot at pamantayan."
+                : "Hindi naabot ng sagot ang mga pamantayang itinakda para sa tanong na ito.");
+          }
+        }
+        const cardFeedbackMethod = document.getElementById("card-feedback-method");
+        if (cardFeedbackMethod) {
+          if (submission.evaluationMethod === "gemini_ai" || submission.source === "backend_gemini") {
+            cardFeedbackMethod.textContent = "Sinuri gamit ang Gemini AI Semantic Evaluation.";
+          } else {
+            cardFeedbackMethod.textContent = "Sinuri batay sa itinakdang sagot at pamantayan; walang AI service na nakakonekta.";
+          }
         }
       } else {
         cardFeedbackBox.classList.add("hidden");
@@ -1151,17 +1183,145 @@ document.addEventListener("DOMContentLoaded", () => {
    * Submits an open-ended answer.
    * Records incorrect answers (e.g. timeouts or blank responses) for Reverse Round.
    */
-  function submitOpenEndedAnswer(answerText, cardData, isTimeout = false) {
+  async function submitOpenEndedAnswer(answerText, cardData, isTimeout = false) {
+    if (appState.isEvaluatingAnswer) return;
     if (appState.answers[cardData.id]) return;
     if (interactiveCard.classList.contains("is-flipped")) return;
 
     stopChallengeTimer();
 
-    const evalResult = evaluateOpenEndedAnswer(answerText, cardData);
-    if (isTimeout) {
-      evalResult.isCorrect = false;
-      evalResult.pointsEarned = 0;
+    // Prevent duplicate submissions during async evaluation
+    appState.isEvaluatingAnswer = true;
+
+    // Visual loading state on the submit button
+    const submitBtn = document.getElementById("btn-submit-open");
+    const textarea = document.getElementById("open-answer-input");
+    const originalBtnContent = submitBtn ? submitBtn.innerHTML : "";
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span>⏳ Sinusuri ng AI...</span>`;
     }
+    if (textarea) {
+      textarea.disabled = true;
+    }
+
+    let evalResult;
+    try {
+      if (isTimeout) {
+        evalResult = {
+          success: true,
+          available: true,
+          isCorrect: false,
+          pointsEarned: 0,
+          maxPoints: cardData.points || 1,
+          feedback: "Naubos ang itinakdang 30 segundo na palugit para sa pagsusuri.",
+          evaluationMethod: "timeout",
+          criteriaEvaluation: []
+        };
+      } else if (typeof PANITIKARD_API_CLIENT !== "undefined" && typeof PANITIKARD_API_CLIENT.evaluateWrittenAnswer === "function") {
+        evalResult = await PANITIKARD_API_CLIENT.evaluateWrittenAnswer({
+          questionCode: cardData.id,
+          studentAnswer: answerText,
+          cardData,
+          sessionId: appState.remoteSessionId || null
+        });
+      } else {
+        evalResult = {
+          success: false,
+          available: false,
+          isCorrect: false,
+          pointsEarned: 0,
+          maxPoints: cardData.points || 1,
+          feedback: "Hindi maabot ang serbisyo ng AI para sa pagsusuri. Pakisubukang muli.",
+          evaluationMethod: "unavailable"
+        };
+      }
+    } catch (evalErr) {
+      console.warn("[Main] Error during answer evaluation:", evalErr);
+      evalResult = {
+        success: false,
+        available: false,
+        isCorrect: false,
+        pointsEarned: 0,
+        maxPoints: cardData.points || 1,
+        feedback: "Hindi maabot ang serbisyo ng AI para sa pagsusuri. Pakisubukang muli.",
+        evaluationMethod: "unavailable"
+      };
+    } finally {
+      appState.isEvaluatingAnswer = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnContent;
+      }
+      if (textarea) {
+        textarea.disabled = false;
+      }
+    }
+
+    function renderOpenCardError(msg) {
+      const openCardForm = document.querySelector(".open-card-form");
+      let errorContainer = document.getElementById("open-error-container");
+      if (!errorContainer && openCardForm) {
+        errorContainer = document.createElement("div");
+        errorContainer.id = "open-error-container";
+        errorContainer.className = "alert-box alert-error";
+        errorContainer.style.marginTop = "8px";
+        errorContainer.style.padding = "8px 12px";
+        errorContainer.style.fontSize = "0.85rem";
+        const submitRow = openCardForm.querySelector(".card-submit-row");
+        if (submitRow) {
+          openCardForm.insertBefore(errorContainer, submitRow);
+        } else {
+          openCardForm.appendChild(errorContainer);
+        }
+      }
+      if (errorContainer) {
+        errorContainer.classList.remove("hidden");
+        errorContainer.innerHTML = `⚠️ <span>${msg}</span>`;
+      }
+    }
+
+    // Fail closed if Gemini AI is unavailable: do not record false success, do not award points, allow retry
+    if (!isTimeout && (!evalResult || evalResult.available === false || evalResult.success === false)) {
+      renderOpenCardError(evalResult?.feedback || "Hindi maabot ang Gemini AI para suriin ang iyong sagot. Pakisubukang muli ang pagsusumite.");
+      return;
+    }
+
+    // Persist to authoritative backend session via submit_game_answer
+    let officialRecord = null;
+    try {
+      officialRecord = await persistRemoteAnswer(cardData.id, answerText, "main", { isTimeout });
+    } catch (persistErr) {
+      console.warn("[Main] Failed to record answer to official game session:", persistErr.message);
+      renderOpenCardError(`Hindi maitala ang opisyal na marka sa iyong sesyon (${persistErr.message || "Network Error"}). Pakisubukang muli.`);
+      return;
+    }
+
+    // Require a valid official RPC response containing valid pointsAwarded and isCorrect fields.
+    // Official score MUST come strictly from submit_game_answer; never fall back to Gemini's score.
+    const rawPoints = typeof officialRecord?.pointsAwarded === "number"
+      ? officialRecord.pointsAwarded
+      : (typeof officialRecord?.answer?.pointsAwarded === "number" ? officialRecord.answer.pointsAwarded : null);
+    const rawCorrect = typeof officialRecord?.isCorrect === "boolean"
+      ? officialRecord.isCorrect
+      : (typeof officialRecord?.answer?.isCorrect === "boolean" ? officialRecord.answer.isCorrect : null);
+
+    const isOfficialValid = officialRecord &&
+      typeof officialRecord === "object" &&
+      rawPoints !== null &&
+      Number.isFinite(rawPoints) &&
+      rawPoints >= 0 &&
+      rawCorrect !== null;
+
+    if (!isOfficialValid) {
+      console.warn("[Main] Missing or invalid official RPC response from submit_game_answer:", officialRecord);
+      renderOpenCardError("Hindi natanggap ang wastong opisyal na marka mula sa database. Pakisubukang muli.");
+      return;
+    }
+
+    const authoritativePoints = rawPoints;
+    const authoritativeCorrect = rawCorrect;
 
     appState.answers[cardData.id] = {
       cardId: cardData.id,
@@ -1172,20 +1332,28 @@ document.addEventListener("DOMContentLoaded", () => {
       prompt: cardData.prompt,
       userAnswer: answerText,
       correctAnswer: cardData.answer,
-      isCorrect: evalResult.isCorrect,
-      pointsEarned: evalResult.pointsEarned,
-      maxPoints: cardData.points,
+      isCorrect: authoritativeCorrect,
+      pointsEarned: authoritativePoints,
+      maxPoints: cardData.points || 1,
       explanation: cardData.explanation,
       terms: cardData.terms,
-      evaluationMethod: evalResult.evaluationMethod,
-      evaluationContext: evalResult.evaluationContext,
+      aiFeedback: evalResult.feedback || null,
+      semanticScore: evalResult.semanticScore ?? null,
+      confidenceScore: evalResult.confidenceScore ?? null,
+      criteriaEvaluation: evalResult.criteriaEvaluation || [],
+      evaluationMethod: officialRecord.evaluationMethod || officialRecord.answer?.evaluationMethod || "submit_game_answer",
+      evaluationContext: {
+        question: cardData.prompt,
+        expectedAnswer: cardData.answer,
+        rubricGroups: cardData.terms || [],
+        studentAnswer: answerText
+      },
       isTimeout: isTimeout,
       submittedAt: new Date().toISOString()
     };
-    persistRemoteAnswer(cardData.id, answerText, "main", { isTimeout });
 
     // Record incorrect question for Reverse Round
-    if (!evalResult.isCorrect) {
+    if (!authoritativeCorrect) {
       const exists = appState.incorrectQuestions.some(item => item.id === cardData.id);
       if (!exists) {
         appState.incorrectQuestions.push({
@@ -2480,6 +2648,12 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="result-item-explanation">
             <strong>📚 Paliwanag:</strong> ${escapeHtml(card.explanation)}
           </div>
+
+          ${record.aiFeedback ? `
+            <div class="result-item-explanation" style="color: #1e3a8a; background: #eff6ff; padding: 6px 10px; border-radius: 6px; margin-top: 6px; white-space: pre-line;">
+              <strong>🤖 AI Pagsusuri at Feedback:</strong> ${escapeHtml(record.aiFeedback)}
+            </div>
+          ` : ""}
 
           ${record.terms && record.terms.length > 0 ? `
             <div class="result-item-explanation" style="color: #b45309;">

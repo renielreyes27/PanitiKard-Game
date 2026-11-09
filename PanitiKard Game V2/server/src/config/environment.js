@@ -24,10 +24,11 @@ const config = {
     serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   },
 
-  // Gemini AI Configuration Placeholders (Phase 5)
+  // Gemini AI Configuration (Phase 5)
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || '',
-    model: process.env.GEMINI_MODEL || 'gemini-1.5-flash'
+    model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+    timeoutMs: parseInt(process.env.GEMINI_TIMEOUT_MS, 10) || 15000
   }
 };
 

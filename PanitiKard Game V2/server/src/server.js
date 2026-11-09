@@ -13,15 +13,16 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const config = require('./config/environment');
-const { getSupabaseStatus, checkSupabaseConnectivity } = require('./services/supabase');
+const { getSupabaseStatus, checkSupabaseConnectivity, getSupabaseAdmin } = require('./services/supabase');
 const { createCatalogService } = require('./services/catalogService');
 const { createGameService } = require('./services/gameService');
 const { createContentService } = require('./services/contentService');
+const { createGeminiService } = require('./services/gemini');
 const { createApiRouter } = require('./routes/apiRoutes');
 const { HttpError } = require('./middleware/httpError');
 
 function createApp({ catalogService = createCatalogService(), gameService = createGameService(),
-  contentService = createContentService(), authenticate, connectivityCheck = checkSupabaseConnectivity } = {}) {
+  contentService = createContentService(), geminiService = createGeminiService(), authenticate, connectivityCheck = checkSupabaseConnectivity, adminClientFactory = getSupabaseAdmin } = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());
@@ -58,7 +59,7 @@ function createApp({ catalogService = createCatalogService(), gameService = crea
     timestamp: new Date().toISOString()
   }));
 
-  app.use('/api/v1', createApiRouter({ catalogService, gameService, contentService, authenticate }));
+  app.use('/api/v1', createApiRouter({ catalogService, gameService, contentService, geminiService, authenticate, adminClientFactory }));
 
   app.use((req, _res, next) => next(new HttpError(404, 'NOT_FOUND', `Route not found: ${req.method} ${req.path}`)));
   app.use((error, _req, res, _next) => {
