@@ -33,14 +33,13 @@ test("Vercel: vercel.json exists and is valid JSON with required rewrites", () =
 
   assert.ok(Array.isArray(content.rewrites), "rewrites must be an array");
 
-  // Verify route rewrites
-  const rewriteSources = content.rewrites.map(r => r.source);
-  assert.ok(rewriteSources.includes("/api/v1/:path*"), "Must rewrite /api/v1/:path* to serverless API");
-  assert.ok(rewriteSources.includes("/api/v1"), "Must rewrite /api/v1 to serverless API");
-  assert.ok(rewriteSources.includes("/health"), "Must rewrite /health to serverless API");
-  assert.ok(rewriteSources.includes("/dashboard"), "Must rewrite /dashboard to /dashboard.html");
-  assert.ok(rewriteSources.includes("/teacher"), "Must rewrite /teacher to /dashboard.html");
-  assert.ok(rewriteSources.includes("/admin"), "Must rewrite /admin to /dashboard.html");
+  // Verify route rewrites and clean destinations
+  const getDestination = (source) => content.rewrites.find(r => r.source === source)?.destination;
+  assert.equal(getDestination("/api/v1/:path*"), "/api/index", "Must rewrite /api/v1/:path* to /api/index");
+  assert.equal(getDestination("/api/v1"), "/api/index", "Must rewrite /api/v1 to /api/index");
+  assert.equal(getDestination("/health"), "/api/index", "Must rewrite /health to /api/index");
+  assert.equal(getDestination("/teacher"), "/dashboard", "Must rewrite /teacher to /dashboard");
+  assert.equal(getDestination("/admin"), "/dashboard", "Must rewrite /admin to /dashboard");
 });
 
 test("Vercel: api/index.js exists and exports the Express app", () => {

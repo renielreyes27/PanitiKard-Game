@@ -6,27 +6,23 @@
   "rewrites": [
     {
       "source": "/api/v1",
-      "destination": "/api/index.js"
+      "destination": "/api/index"
     },
     {
       "source": "/api/v1/:path*",
-      "destination": "/api/index.js"
+      "destination": "/api/index"
     },
     {
       "source": "/health",
-      "destination": "/api/index.js"
+      "destination": "/api/index"
     },
     {
       "source": "/teacher",
-      "destination": "/dashboard.html"
+      "destination": "/dashboard"
     },
     {
       "source": "/admin",
-      "destination": "/dashboard.html"
-    },
-    {
-      "source": "/dashboard",
-      "destination": "/dashboard.html"
+      "destination": "/dashboard"
     }
   ]
 }
