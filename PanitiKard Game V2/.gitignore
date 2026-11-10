@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Build Output
+dist/
+
 # Environment Variables & Secrets
 .env
 .env.local

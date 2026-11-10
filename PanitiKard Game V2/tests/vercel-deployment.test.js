@@ -27,6 +27,7 @@ test("Vercel: vercel.json exists and is valid JSON with required rewrites", () =
 
   const content = JSON.parse(fs.readFileSync(vercelJsonPath, "utf8"));
   assert.equal(typeof content, "object");
+  assert.equal(content.outputDirectory, "dist", "outputDirectory must be configured as dist");
   assert.equal(content.cleanUrls, true, "cleanUrls must be enabled");
   assert.equal(content.installCommand, "npm --prefix server install", "installCommand must target server package");
 
@@ -253,12 +254,95 @@ test("Vercel: root package.json includes a valid build script and preserves the 
     "string",
     "Root package.json must define a build script so Vercel npm run build succeeds"
   );
-  assert.ok(pkg.scripts.build.trim().length > 0, "build script must not be empty");
+  assert.equal(
+    pkg.scripts.build,
+    "node scripts/build.js",
+    "Root build script must invoke node scripts/build.js"
+  );
   assert.equal(
     pkg.scripts.dev,
     'concurrently -k -n BACKEND,FRONTEND "npm --prefix server run dev" "npx http-server . -p 8080"',
     "Existing dev script must be preserved exactly"
   );
+});
+
+test("Vercel Deployment: scripts/build.js generates dist/ containing only frontend assets", () => {
+  const { execSync } = require("node:child_process");
+  execSync("node scripts/build.js", { cwd: v2Root, stdio: "pipe" });
+
+  const distDir = path.join(v2Root, "dist");
+  assert.ok(fs.existsSync(distDir), "dist/ directory must exist after build");
+
+  const requiredStaticFiles = [
+    "index.html",
+    "dashboard.html",
+    path.join("css", "style.css"),
+    path.join("css", "dashboard.css"),
+    path.join("js", "main.js"),
+    path.join("js", "cards-data.js"),
+    path.join("js", "api-client.js"),
+    path.join("js", "game-api.js"),
+    path.join("js", "answer-evaluator.js"),
+    path.join("js", "dashboard.js"),
+    path.join("js", "dashboard-api.js"),
+    path.join("js", "dashboard-auth.js"),
+    path.join("assets", "audio", ".gitkeep"),
+    path.join("assets", "icons", ".gitkeep"),
+    path.join("assets", "images", ".gitkeep")
+  ];
+
+  for (const rel of requiredStaticFiles) {
+    const fullPath = path.join(distDir, rel);
+    assert.ok(fs.existsSync(fullPath), `dist/ must contain ${rel}`);
+  }
+});
+
+test("Vercel Deployment: dist/ strictly excludes backend code, serverless functions, tests, and env secrets", () => {
+  const distDir = path.join(v2Root, "dist");
+  assert.ok(fs.existsSync(distDir), "dist/ directory must exist");
+
+  const forbiddenEntries = [
+    "server",
+    "api",
+    "tests",
+    "node_modules",
+    "scripts",
+    "package.json",
+    "package-lock.json",
+    "vercel.json",
+    ".gitignore",
+    ".env",
+    ".env.local"
+  ];
+
+  for (const entry of forbiddenEntries) {
+    const targetPath = path.join(distDir, entry);
+    assert.equal(
+      fs.existsSync(targetPath),
+      false,
+      `dist/ must NEVER contain forbidden backend or config file: ${entry}`
+    );
+  }
+
+  // Recursive walk to ensure no .env, server, or test files exist anywhere inside dist/
+  function scanDir(dir) {
+    for (const file of fs.readdirSync(dir, { withFileTypes: true })) {
+      const fullPath = path.join(dir, file.name);
+      assert.ok(!file.name.startsWith(".env"), `Forbidden env file found in dist: ${fullPath}`);
+      assert.ok(file.name !== "server.js", `Forbidden server.js found in dist: ${fullPath}`);
+      if (file.isDirectory()) {
+        scanDir(fullPath);
+      }
+    }
+  }
+  scanDir(distDir);
+});
+
+test("Vercel Deployment: .gitignore ignores dist/ directory", () => {
+  const gitignorePath = path.join(v2Root, ".gitignore");
+  assert.ok(fs.existsSync(gitignorePath), ".gitignore must exist");
+  const gitignore = fs.readFileSync(gitignorePath, "utf8");
+  assert.match(gitignore, /^dist\/$/m, ".gitignore must ignore dist/ directory");
 });
 
 function sliceBetween(source, startMarker, endMarker) {
