@@ -1634,3 +1634,123 @@ body.dashboard-body {
   font-style: italic;
   padding: 0.1rem 0;
 }
+
+/* --------------------------------------------------------------------------
+   Dynamic Card Creation & Rubric Group Editor
+   -------------------------------------------------------------------------- */
+.category-guidance-banner {
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--dash-radius-md);
+  font-size: 0.8rem;
+  line-height: 1.45;
+  margin-top: 0.5rem;
+  margin-bottom: 1rem;
+  border: 1px solid transparent;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.category-guidance-banner.cat-question {
+  background: #f0fdf4;
+  color: #14532d;
+  border-color: #86efac;
+}
+
+.category-guidance-banner.cat-statement {
+  background: #eff6ff;
+  color: #1e3a8a;
+  border-color: #93c5fd;
+}
+
+.category-guidance-banner.cat-correction {
+  background: #fffbeb;
+  color: #78350f;
+  border-color: #fde68a;
+}
+
+.category-guidance-banner.cat-bonus {
+  background: #fefce8;
+  color: #713f12;
+  border-color: #fef08a;
+}
+
+.category-guidance-banner.cat-reverse {
+  background: #faf5ff;
+  color: #581c87;
+  border-color: #d8b4fe;
+}
+
+.category-guidance-banner.cat-help {
+  background: #ecfeff;
+  color: #164e63;
+  border-color: #67e8f9;
+}
+
+.category-guidance-banner.cat-challenge {
+  background: #fef2f2;
+  color: #7f1d1d;
+  border-color: #fca5a5;
+}
+
+.category-guidance-banner.cat-quiz {
+  background: #f8fafc;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+.rubric-groups-container {
+  background: #f8fafc;
+  border: 1px solid var(--dash-border);
+  border-radius: var(--dash-radius-md);
+  padding: 0.75rem 0.9rem;
+}
+
+.rubric-groups-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.rubric-group-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #ffffff;
+  border: 1px solid var(--dash-border);
+  border-radius: var(--dash-radius-sm);
+  padding: 0.4rem 0.6rem;
+}
+
+.rubric-group-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--dash-primary);
+  background: var(--dash-primary-soft);
+  border: 1px solid var(--dash-primary-light);
+  border-radius: var(--dash-radius-sm);
+  padding: 0.2rem 0.45rem;
+  white-space: nowrap;
+}
+
+.rubric-group-input {
+  flex: 1;
+  font-size: 0.85rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.btn-remove-rubric {
+  background: transparent;
+  border: none;
+  color: var(--dash-text-muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.15rem 0.35rem;
+  border-radius: var(--dash-radius-sm);
+}
+
+.btn-remove-rubric:hover {
+  color: var(--dash-danger, #ef4444);
+  background: #fee2e2;
+}

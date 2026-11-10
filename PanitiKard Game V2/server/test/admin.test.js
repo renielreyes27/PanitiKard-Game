@@ -1372,3 +1372,489 @@ test('Fix 2: contentService reviseQuestion rejects an archived question with 409
     'reviseQuestion must throw HttpError 409 QUESTION_ARCHIVED for archived questions'
   );
 });
+
+// ---------------------------------------------------------------------------
+// Admin-Only System Status & API Settings Endpoints (requireAdmin)
+// ---------------------------------------------------------------------------
+
+test('GET /admin/system-status returns 200 and full system status for authenticated admin', async () => {
+  const { app } = testApp({ role: 'admin' });
+  await withServer(app, async base => {
+    const response = await fetch(`${base}/api/v1/admin/system-status`);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.apiServer.status, 'online');
+    assert.equal(body.data.database.status, 'connected');
+    assert.equal(body.data.database.label, 'Connected');
+    assert.equal(body.data.database.reachable, true);
+    assert.equal(body.data.rlsSecurity.status, 'not_verified');
+    assert.equal(body.data.rlsSecurity.label, 'Not verified');
+    assert.equal(body.data.rlsSecurity.verified, false);
+    assert.ok(body.data.evaluator, 'evaluator status present');
+    assert.equal(body.data.evaluator.status, 'operational');
+    assert.equal(body.data.evaluator.label, 'Operational');
+    assert.ok(body.data.apiSettings, 'apiSettings present');
+    assert.equal(body.data.apiSettings.rbacProtection, 'RBAC Protected');
+  });
+});
+
+test('GET /admin/system-status reports disconnected and unconfigured states accurately from connectivityCheck', async () => {
+  const disconnectedApp = createApp({
+    catalogService: makeCatalogService(),
+    gameService: {},
+    contentService: {},
+    authenticate: (req, _res, next) => {
+      req.auth = { user: { id: 'admin-1' }, profile: { role: 'admin' }, client: {} };
+      next();
+    },
+    connectivityCheck: async () => ({ reachable: false, reason: 'query_failed' })
+  });
+
+  await withServer(disconnectedApp, async base => {
+    const response = await fetch(`${base}/api/v1/admin/system-status`);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.data.database.status, 'disconnected');
+    assert.equal(body.data.database.label, 'Disconnected');
+    assert.equal(body.data.database.reachable, false);
+  });
+
+  const unconfiguredApp = createApp({
+    catalogService: makeCatalogService(),
+    gameService: {},
+    contentService: {},
+    authenticate: (req, _res, next) => {
+      req.auth = { user: { id: 'admin-1' }, profile: { role: 'admin' }, client: {} };
+      next();
+    },
+    connectivityCheck: async () => ({ reachable: false, reason: 'not_configured' })
+  });
+
+  await withServer(unconfiguredApp, async base => {
+    const response = await fetch(`${base}/api/v1/admin/system-status`);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.data.database.status, 'unconfigured');
+    assert.equal(body.data.database.label, 'Unconfigured');
+    assert.equal(body.data.database.reachable, false);
+  });
+});
+
+test('GET /admin/system-status returns 403 ADMIN_REQUIRED for authenticated teacher', async () => {
+  const { app } = testApp({ role: 'teacher' });
+  await withServer(app, async base => {
+    const response = await fetch(`${base}/api/v1/admin/system-status`);
+    const body = await response.json();
+    assert.equal(response.status, 403);
+    assert.equal(body.success, false);
+    assert.equal(body.error, 'ADMIN_REQUIRED');
+  });
+});
+
+test('GET /admin/system-status returns 403 ADMIN_REQUIRED for student role', async () => {
+  const { app } = testApp({ role: 'student' });
+  await withServer(app, async base => {
+    const response = await fetch(`${base}/api/v1/admin/system-status`);
+    const body = await response.json();
+    assert.equal(response.status, 403);
+    assert.equal(body.error, 'ADMIN_REQUIRED');
+  });
+});
+
+test('GET /admin/system-status returns 401 AUTH_REQUIRED for unauthenticated request', async () => {
+  const { app } = testApp({ authenticated: false });
+  await withServer(app, async base => {
+    const response = await fetch(`${base}/api/v1/admin/system-status`);
+    const body = await response.json();
+    assert.equal(response.status, 401);
+    assert.equal(body.error, 'AUTH_REQUIRED');
+  });
+});
+
+test('GET /admin/api-settings returns 200 for admin and 403 ADMIN_REQUIRED for teacher', async () => {
+  const { app: adminApp } = testApp({ role: 'admin' });
+  await withServer(adminApp, async base => {
+    const response = await fetch(`${base}/api/v1/admin/api-settings`);
+    const body = await response.json();
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.basePath, '/api/v1');
+    assert.equal(body.data.adminRoleRequired, true);
+  });
+
+  const { app: teacherApp } = testApp({ role: 'teacher' });
+  await withServer(teacherApp, async base => {
+    const response = await fetch(`${base}/api/v1/admin/api-settings`);
+    const body = await response.json();
+    assert.equal(response.status, 403);
+    assert.equal(body.success, false);
+    assert.equal(body.error, 'ADMIN_REQUIRED');
+  });
+});
+
+test('Security Regression: Real Teacher profile processed through createAuthenticator cannot access Admin-only endpoints', async () => {
+  const { createAuthenticator } = require('../src/middleware/authenticate');
+  const realAuthenticate = createAuthenticator({
+    userClientFactory: () => ({
+      auth: {
+        getUser: async () => ({
+          data: { user: { id: 'teacher-real-1', email: 'teacher@paaralan.ph' } },
+          error: null
+        })
+      },
+      from: (table) => {
+        assert.equal(table, 'profiles');
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { id: 'teacher-real-1', display_name: 'Guro Reyes', role: 'teacher' },
+                error: null
+              })
+            })
+          })
+        };
+      }
+    })
+  });
+
+  const app = createApp({
+    catalogService: makeCatalogService(),
+    gameService: {},
+    contentService: {},
+    authenticate: realAuthenticate,
+    connectivityCheck: async () => ({ reachable: true })
+  });
+
+  await withServer(app, async base => {
+    const headers = { authorization: 'Bearer valid-supabase-teacher-jwt' };
+
+    const statusRes = await fetch(`${base}/api/v1/admin/system-status`, { headers });
+    const statusBody = await statusRes.json();
+    assert.equal(statusRes.status, 403);
+    assert.equal(statusBody.success, false);
+    assert.equal(statusBody.error, 'ADMIN_REQUIRED');
+
+    const settingsRes = await fetch(`${base}/api/v1/admin/api-settings`, { headers });
+    const settingsBody = await settingsRes.json();
+    assert.equal(settingsRes.status, 403);
+    assert.equal(settingsBody.success, false);
+    assert.equal(settingsBody.error, 'ADMIN_REQUIRED');
+  });
+});
+
+test('Security Regression: Valid guest HMAC token cannot access Admin-only endpoints', async () => {
+  const { createAuthenticator } = require('../src/middleware/authenticate');
+  const { generateGuestToken } = require('../src/services/guestTokenService');
+
+  const guestToken = generateGuestToken({
+    sessionId: '00000000-0000-4000-8000-000000000123',
+    studentName: 'Juan Dela Cruz'
+  });
+  const realAuthenticate = createAuthenticator({
+    userClientFactory: () => ({
+      auth: {
+        getUser: async () => ({
+          data: { user: null },
+          error: { message: 'invalid JWT: unable to parse or verify signature' }
+        })
+      }
+    })
+  });
+
+  const app = createApp({
+    catalogService: makeCatalogService(),
+    gameService: {},
+    contentService: {},
+    authenticate: realAuthenticate,
+    connectivityCheck: async () => ({ reachable: true })
+  });
+
+  await withServer(app, async base => {
+    const headers = {
+      authorization: `Bearer ${guestToken}`,
+      'x-guest-token': guestToken
+    };
+
+    const statusRes = await fetch(`${base}/api/v1/admin/system-status`, { headers });
+    const statusBody = await statusRes.json();
+    assert.equal(statusRes.status, 401);
+    assert.equal(statusBody.success, false);
+    assert.equal(statusBody.error, 'INVALID_TOKEN');
+
+    const settingsRes = await fetch(`${base}/api/v1/admin/api-settings`, { headers });
+    const settingsBody = await settingsRes.json();
+    assert.equal(settingsRes.status, 401);
+    assert.equal(settingsBody.success, false);
+    assert.equal(settingsBody.error, 'INVALID_TOKEN');
+  });
+});
+
+test('Security Regression: Admin endpoint responses and public /health do not expose URLs, API keys, service-role keys, or secrets', async () => {
+  const { app } = testApp({ role: 'admin' });
+  await withServer(app, async base => {
+    const healthRes = await fetch(`${base}/health`);
+    const healthBody = await healthRes.json();
+    const healthRaw = JSON.stringify(healthBody);
+
+    assert.equal(healthRes.status, 200);
+    assert.equal(healthBody.success, true);
+    assert.equal(healthBody.status, 'healthy');
+    assert.equal(healthBody.supabase?.connectivity?.reachable, true);
+    assert.equal(healthBody.environment, undefined, '/health must not expose environment');
+    assert.equal(healthBody.supabase?.hasServiceRoleKey, undefined, '/health must not expose hasServiceRoleKey');
+    assert.equal(healthBody.supabase?.serviceRoleActive, undefined, '/health must not expose serviceRoleActive');
+    assert.equal(healthBody.supabase?.hasUrl, undefined, '/health must not expose hasUrl');
+    assert.equal(healthBody.supabase?.hasAnonKey, undefined, '/health must not expose hasAnonKey');
+    assert.equal(healthBody.supabase?.statusMessage, undefined, '/health must not expose statusMessage');
+
+    const statusRes = await fetch(`${base}/api/v1/admin/system-status`);
+    const statusBody = await statusRes.json();
+    const statusRaw = JSON.stringify(statusBody);
+
+    const settingsRes = await fetch(`${base}/api/v1/admin/api-settings`);
+    const settingsBody = await settingsRes.json();
+    const settingsRaw = JSON.stringify(settingsBody);
+
+    for (const raw of [healthRaw, statusRaw, settingsRaw]) {
+      assert.equal(/supabase\.co/i.test(raw), false, 'Response must not contain Supabase project URL');
+      assert.equal(/service_role|serviceRoleKey|SUPABASE_SERVICE_ROLE_KEY/i.test(raw), false, 'Response must not expose service role key metadata');
+      assert.equal(/anonKey|SUPABASE_ANON_KEY/i.test(raw), false, 'Response must not expose anon key metadata');
+      assert.equal(/GUEST_SESSION_SECRET/i.test(raw), false, 'Response must not expose guest session secret');
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Regression Tests: Question Publishing Error Mapping (contentService.check)
+// ---------------------------------------------------------------------------
+
+test('Regression: Publishing a question under a draft topic (23514) returns a clear 400 CONSTRAINT_VIOLATION error, not generic 503', async () => {
+  const { createContentService } = require('../src/services/contentService');
+  const service = createContentService();
+
+  const mockClient = {
+    from: (table) => {
+      if (table === 'questions') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { id: 'q-uuid-draft-topic', code: 'draft-topic-q-01', current_version: 1, status: 'draft' },
+                error: null
+              })
+            })
+          })
+        };
+      }
+      if (table === 'question_versions') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => ({
+                limit: () => ({
+                  maybeSingle: async () => ({
+                    data: { version_number: 1 },
+                    error: null
+                  })
+                })
+              })
+            })
+          })
+        };
+      }
+      return {};
+    },
+    rpc: async () => ({
+      data: null,
+      error: {
+        code: '23514',
+        message: 'Publish the topic before publishing its question'
+      }
+    })
+  };
+
+  const app = createApp({
+    catalogService: makeCatalogService(),
+    gameService: {},
+    contentService: service,
+    authenticate: (req, _res, next) => {
+      req.auth = { user: { id: 'teacher-1' }, profile: { role: 'teacher' }, client: mockClient };
+      next();
+    },
+    connectivityCheck: async () => ({ reachable: true })
+  });
+
+  await withServer(app, async base => {
+    const response = await fetch(`${base}/api/v1/admin/questions/draft-topic-q-01/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ versionNumber: 1 })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 400);
+    assert.equal(body.success, false);
+    assert.equal(body.error, 'CONSTRAINT_VIOLATION');
+    assert.equal(body.message, 'Publish the topic before publishing its question.');
+    assert.notEqual(body.message, 'A server error occurred.');
+  });
+});
+
+test('Regression: Publishing a question under a published topic succeeds with 200 OK', async () => {
+  const { createContentService } = require('../src/services/contentService');
+  const service = createContentService();
+
+  const mockClient = {
+    from: (table) => {
+      if (table === 'questions') {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { id: 'q-uuid-pub-topic', code: 'pub-topic-q-01', current_version: 1, status: 'draft' },
+                error: null
+              })
+            })
+          })
+        };
+      }
+      if (table === 'question_versions') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => ({
+                limit: () => ({
+                  maybeSingle: async () => ({
+                    data: { version_number: 1 },
+                    error: null
+                  })
+                })
+              })
+            })
+          })
+        };
+      }
+      return {};
+    },
+    rpc: async () => ({ data: true, error: null })
+  };
+
+  const app = createApp({
+    catalogService: makeCatalogService(),
+    gameService: {},
+    contentService: service,
+    authenticate: (req, _res, next) => {
+      req.auth = { user: { id: 'teacher-1' }, profile: { role: 'teacher' }, client: mockClient };
+      next();
+    },
+    connectivityCheck: async () => ({ reachable: true })
+  });
+
+  await withServer(app, async base => {
+    const response = await fetch(`${base}/api/v1/admin/questions/pub-topic-q-01/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ versionNumber: 1 })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.success, true);
+    assert.equal(body.data.code, 'pub-topic-q-01');
+    assert.equal(body.data.status, 'published');
+    assert.equal(body.data.currentVersion, 1);
+  });
+});
+
+test('Regression: contentService maps known PostgreSQL codes safely and masks unknown database errors as 503', async () => {
+  const { createContentService } = require('../src/services/contentService');
+  const service = createContentService();
+
+  function makeFailingPublishClient(pgError) {
+    return {
+      from: (table) => {
+        if (table === 'questions') {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({
+                  data: { id: 'q-uuid-1', code: 'elem-q-001', current_version: 1, status: 'draft' },
+                  error: null
+                })
+              })
+            })
+          };
+        }
+        return {};
+      },
+      rpc: async () => ({ data: null, error: pgError })
+    };
+  }
+
+  // 23505 -> 409 ALREADY_EXISTS
+  await assert.rejects(
+    () => service.publishQuestion(makeFailingPublishClient({ code: '23505', message: 'duplicate key value violates unique constraint' }), 'elem-q-001', 1),
+    (err) => err.status === 409 && err.code === 'ALREADY_EXISTS' && !/unique constraint/i.test(err.message)
+  );
+
+  // 23514 (raw SQL check constraint) -> 400 CONSTRAINT_VIOLATION with sanitized message
+  await assert.rejects(
+    () => service.publishQuestion(makeFailingPublishClient({ code: '23514', message: 'new row for relation "public.questions" violates check constraint "questions_status_check"' }), 'elem-q-001', 1),
+    (err) => err.status === 400 && err.code === 'CONSTRAINT_VIOLATION' && !/public\.questions|questions_status_check/i.test(err.message)
+  );
+
+  // P0002 -> 404 NOT_FOUND
+  await assert.rejects(
+    () => service.publishQuestion(makeFailingPublishClient({ code: 'P0002', message: 'Question not found' }), 'elem-q-001', 1),
+    (err) => err.status === 404 && err.code === 'NOT_FOUND' && err.message === 'Question not found.'
+  );
+
+  // 42501 -> 403 FORBIDDEN
+  await assert.rejects(
+    () => service.publishQuestion(makeFailingPublishClient({ code: '42501', message: 'Teacher or administrator permission required' }), 'elem-q-001', 1),
+    (err) => err.status === 403 && err.code === 'FORBIDDEN'
+  );
+
+  // 22023 and 23503 -> 400 INVALID_INPUT
+  await assert.rejects(
+    () => service.publishQuestion(makeFailingPublishClient({ code: '22023', message: 'invalid parameter value' }), 'elem-q-001', 1),
+    (err) => err.status === 400 && err.code === 'INVALID_INPUT'
+  );
+  await assert.rejects(
+    () => service.publishQuestion(makeFailingPublishClient({ code: '23503', message: 'insert or update on table violates foreign key constraint' }), 'elem-q-001', 1),
+    (err) => err.status === 400 && err.code === 'INVALID_INPUT' && !/foreign key constraint/i.test(err.message)
+  );
+
+  // Unknown database error (e.g. 42P01 or XX000) -> 503 DATABASE_ERROR and masked as "A server error occurred." by Express
+  const unknownDbClient = makeFailingPublishClient({
+    code: 'XX000',
+    message: 'FATAL: internal postgres relation pg_catalog.pg_class corrupted at secret_host'
+  });
+  const app = createApp({
+    catalogService: makeCatalogService(),
+    gameService: {},
+    contentService: service,
+    authenticate: (req, _res, next) => {
+      req.auth = { user: { id: 'teacher-1' }, profile: { role: 'teacher' }, client: unknownDbClient };
+      next();
+    },
+    connectivityCheck: async () => ({ reachable: true })
+  });
+
+  await withServer(app, async base => {
+    const response = await fetch(`${base}/api/v1/admin/questions/elem-q-001/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ versionNumber: 1 })
+    });
+    const body = await response.json();
+
+    assert.equal(response.status, 503);
+    assert.equal(body.success, false);
+    assert.equal(body.error, 'DATABASE_ERROR');
+    assert.equal(body.message, 'A server error occurred.');
+    assert.equal(/pg_catalog|secret_host/i.test(JSON.stringify(body)), false);
+  });
+});

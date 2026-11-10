@@ -2,7 +2,7 @@ const express = require('express');
 const { createAuthenticator, createGuestOrUserAuthenticator, requireStaff, requireAdmin } = require('../middleware/authenticate');
 const { createRubricEvaluatorService, validateEvaluationInput } = require('../services/rubricEvaluator');
 const { generateGuestToken, isGuestToken } = require('../services/guestTokenService');
-const { getSupabaseAdmin } = require('../services/supabase');
+const { getSupabaseAdmin, checkSupabaseConnectivity } = require('../services/supabase');
 const { PANITIKARD_DECKS } = require('../../../js/cards-data');
 const { quizRubrics } = require('../../../js/answer-evaluator');
 const { HttpError } = require('../middleware/httpError');
@@ -118,12 +118,30 @@ async function resolveQuestionContext(questionCode, client, options = {}) {
 
   const { data: dbR, error: rErr } = await rubricClient
     .from('question_evaluation_rubrics')
-    .select('expected_answer, rubric_groups, accepted_answers')
+    .select('expected_answer, answer_key, rubric_groups, accepted_answers')
     .eq('question_version_id', dbV.id)
     .maybeSingle();
 
   if (rErr) {
     throw new HttpError(503, 'DATABASE_ERROR', `Failed to verify question rubric: ${rErr.message}`);
+  }
+
+  // If question has an answer key (e.g. Multiple Choice), resolve label from question_choices if available
+  let choiceDisplay = null;
+  if (dbR?.answer_key && rubricClient && typeof rubricClient.from === 'function') {
+    try {
+      const { data: choiceData } = await rubricClient
+        .from('question_choices')
+        .select('option_key, label')
+        .eq('question_version_id', dbV.id)
+        .eq('option_key', dbR.answer_key)
+        .maybeSingle();
+      if (choiceData && choiceData.label) {
+        choiceDisplay = `${choiceData.option_key}. ${choiceData.label}`;
+      }
+    } catch (_cErr) {
+      // Graceful fallback if choices lookup fails
+    }
   }
 
   // 4. Resolve fallback metadata from static decks if rubric is genuinely missing in DB
@@ -142,7 +160,8 @@ async function resolveQuestionContext(questionCode, client, options = {}) {
     }
   }
 
-  const expectedAnswer = dbR?.expected_answer || staticCard?.answer || '';
+  const rawExpected = dbR?.expected_answer || dbR?.answer_key || staticCard?.answer || '';
+  const expectedAnswer = choiceDisplay || rawExpected;
   const rubricCriteria = (Array.isArray(dbR?.rubric_groups) && dbR.rubric_groups.length > 0)
     ? dbR.rubric_groups
     : (staticCard?.terms || staticCard?.rubricGroups || (quizRubrics && quizRubrics[questionCode]) || []);
@@ -159,6 +178,8 @@ async function resolveQuestionContext(questionCode, client, options = {}) {
   return {
     prompt,
     expectedAnswer,
+    answerKey: dbR?.answer_key || null,
+    correctAnswer: expectedAnswer,
     rubricCriteria,
     acceptedAnswers,
     category,
@@ -170,7 +191,7 @@ async function resolveQuestionContext(questionCode, client, options = {}) {
   };
 }
 
-function createApiRouter({ catalogService, gameService, contentService, evaluatorService = createRubricEvaluatorService(), authenticate = createAuthenticator(), adminClientFactory = getSupabaseAdmin }) {
+function createApiRouter({ catalogService, gameService, contentService, evaluatorService = createRubricEvaluatorService(), authenticate = createAuthenticator(), adminClientFactory = getSupabaseAdmin, connectivityCheck = checkSupabaseConnectivity }) {
   const evaluator = evaluatorService;
   const router = express.Router();
   const guestOrUserAuth = createGuestOrUserAuthenticator({ userAuthenticator: authenticate });
@@ -205,8 +226,16 @@ function createApiRouter({ catalogService, gameService, contentService, evaluato
     });
   }));
 
-  router.get('/topics', asyncRoute(async (_req, res) => {
-    const topics = await catalogService.listTopics();
+  router.get('/topics', asyncRoute(async (req, res) => {
+    const mode = typeof req.query?.mode === 'string' ? req.query.mode.toLowerCase() : '';
+    if (mode && !['all', 'deck', 'cards', 'quiz'].includes(mode)) {
+      throw new HttpError(400, 'INVALID_MODE', 'mode must be all, deck, cards, or quiz.');
+    }
+    const playableOnly = req.query?.playableOnly === 'true' || Boolean(mode && mode !== 'all');
+    const topics = await catalogService.listTopics(undefined, {
+      mode: mode === 'all' ? '' : mode,
+      playableOnly
+    });
     if (topics === null) return res.json({ success: true, source: 'bundled-fallback', data: null });
     res.json({ success: true, data: topics });
   }));
@@ -338,14 +367,28 @@ function createApiRouter({ catalogService, gameService, contentService, evaluato
 
   router.post('/sessions/:sessionId/answers', guestOrUserAuth, asyncRoute(async (req, res) => {
     const adminClient = typeof adminClientFactory === 'function' ? adminClientFactory() : adminClientFactory;
+    let result;
     if (req.auth?.isGuest) {
       if (req.auth.guestSession?.sessionId !== req.params.sessionId) {
         throw new HttpError(403, 'FORBIDDEN_SESSION', 'Cannot submit answers for another session.');
       }
-      const result = await gameService.submitGuestAnswer(adminClient, req.params.sessionId, req.body);
-      return res.status(201).json({ success: true, data: result });
+      result = await gameService.submitGuestAnswer(adminClient, req.params.sessionId, req.body);
+    } else {
+      result = await gameService.submitAnswer(req.auth.client, req.auth, req.params.sessionId, req.body);
     }
-    const result = await gameService.submitAnswer(req.auth.client, req.auth, req.params.sessionId, req.body);
+
+    if (result && !result.correctAnswer && req.body?.questionCode) {
+      try {
+        const queryClient = req.auth?.client || adminClient;
+        const ctx = await resolveQuestionContext(req.body.questionCode, queryClient, { adminClient });
+        if (ctx && (ctx.correctAnswer || ctx.expectedAnswer)) {
+          result.correctAnswer = ctx.correctAnswer || ctx.expectedAnswer;
+        }
+      } catch (_ctxErr) {
+        // Fallback gracefully without breaking answer recording
+      }
+    }
+
     res.status(201).json({ success: true, data: result });
   }));
 
@@ -419,6 +462,86 @@ function createApiRouter({ catalogService, gameService, contentService, evaluato
     }
     const rubrics = await catalogService.listRubrics(req.auth.client, topicCode ? { topicCode } : {});
     res.json({ success: true, data: rubrics });
+  }));
+
+  // --------------------------------------------------------------------------
+  // Admin-Only System Status & API Settings Endpoints (requireAdmin)
+  // --------------------------------------------------------------------------
+  const buildAdminApiSettings = () => ({
+    basePath: '/api/v1',
+    rbacProtection: 'RBAC Protected',
+    authMechanism: 'Verified JWT Bearer + Supabase RLS',
+    guestSessionsEnabled: true,
+    adminRoleRequired: true
+  });
+
+  const buildAdminSystemStatus = async () => {
+    let connectivity = { reachable: false, reason: 'unavailable' };
+    if (typeof connectivityCheck === 'function') {
+      try {
+        const result = await connectivityCheck();
+        if (result && typeof result === 'object') {
+          connectivity = result;
+        }
+      } catch (_err) {
+        connectivity = { reachable: false, reason: 'check_failed' };
+      }
+    }
+
+    const isReachable = Boolean(connectivity?.reachable);
+    const isUnconfigured = !isReachable && connectivity?.reason === 'not_configured';
+    const dbStatus = isReachable ? 'connected' : (isUnconfigured ? 'unconfigured' : 'disconnected');
+    const dbLabel = isReachable ? 'Connected' : (isUnconfigured ? 'Unconfigured' : 'Disconnected');
+
+    const evaluatorStatus = evaluator.getStatus();
+    const isEvalOperational = Boolean(evaluatorStatus?.operational);
+    const evalStatusValue = evaluatorStatus?.status || (isEvalOperational ? 'operational' : 'unavailable');
+    const evalLabel = isEvalOperational
+      ? 'Operational'
+      : (evaluatorStatus?.configured ? 'Standby' : 'Unavailable');
+
+    return {
+      apiServer: {
+        status: 'online',
+        label: 'Online',
+        service: 'PanitiKard V2 Backend API'
+      },
+      database: {
+        status: dbStatus,
+        label: dbLabel,
+        reachable: isReachable
+      },
+      rlsSecurity: {
+        status: 'not_verified',
+        label: 'Not verified',
+        verified: false,
+        authMode: 'Verified JWT Bearer + Supabase RLS'
+      },
+      evaluator: {
+        status: evalStatusValue,
+        label: evalLabel,
+        operational: isEvalOperational,
+        provider: evaluatorStatus?.provider || 'PanitiKard Deterministic Rubric Evaluator',
+        phase: evaluatorStatus?.phase || 'deterministic-rubric-v1'
+      },
+      apiSettings: buildAdminApiSettings(),
+      checkedAt: new Date().toISOString()
+    };
+  };
+
+  router.get('/admin/system-status', authenticate, requireAdmin, asyncRoute(async (_req, res) => {
+    const status = await buildAdminSystemStatus();
+    res.json({
+      success: true,
+      data: status
+    });
+  }));
+
+  router.get('/admin/api-settings', authenticate, requireAdmin, asyncRoute(async (_req, res) => {
+    res.json({
+      success: true,
+      data: buildAdminApiSettings()
+    });
   }));
 
   // Reserved for a future, explicitly authorized administration workflow.
@@ -533,6 +656,8 @@ function createApiRouter({ catalogService, gameService, contentService, evaluato
             criteriaEvaluation: Array.isArray(existingRecord.rubric_criteria) ? existingRecord.rubric_criteria : [],
             pointsEarned,
             maxPoints,
+            expectedAnswer: context.expectedAnswer || '',
+            correctAnswer: context.expectedAnswer || '',
             model: existingRecord.model_version,
             status: existingRecord.status,
             evaluationMethod: 'deterministic_rubric',
@@ -593,6 +718,8 @@ function createApiRouter({ catalogService, gameService, contentService, evaluato
 
       return {
         ...evaluation,
+        expectedAnswer: evaluation.expectedAnswer || context.expectedAnswer || '',
+        correctAnswer: evaluation.correctAnswer || context.expectedAnswer || '',
         persisted,
         evaluationId
       };

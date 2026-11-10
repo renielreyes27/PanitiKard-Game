@@ -74,7 +74,13 @@
     setGuestToken: (token) => { guestToken = token || null; },
     getGuestToken: () => guestToken || root.PANITIKARD_GUEST_TOKEN || null,
     clearGuestToken: () => { guestToken = null; },
-    listTopics: () => request('/topics'),
+    listTopics: (options = {}) => {
+      const params = new URLSearchParams();
+      if (options && options.playableOnly) params.set('playableOnly', 'true');
+      if (options && options.mode) params.set('mode', String(options.mode));
+      const qs = params.toString();
+      return request(qs ? `/topics?${qs}` : '/topics');
+    },
     listQuestions: (topicCode, kind = 'all') => request(`/topics/${encodeURIComponent(topicCode)}/questions?kind=${encodeURIComponent(kind)}`),
     createSession: async (topicCode, mode, studentName) => {
       const data = await request('/sessions', {

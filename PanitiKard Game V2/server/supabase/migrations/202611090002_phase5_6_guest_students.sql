@@ -387,7 +387,7 @@ begin
     p_session_id, null, v_question.id, v_version.id, p_round, to_jsonb(coalesce(trim(p_response), '')),
     v_correct, v_points, v_max_points, case when v_is_timeout then 'timeout' else v_method end,
     jsonb_build_object('evaluationMethod', case when v_is_timeout then 'timeout' else v_method end,
-      'timedOut', v_is_timeout, 'questionVersionId', v_version.id)
+      'timedOut', v_is_timeout, 'questionVersionId', v_version.id, 'correctAnswer', v_correct_display)
   ) returning * into v_answer;
 
   if p_round = 'reverse' then
@@ -410,7 +410,8 @@ begin
     'isCorrect', v_correct,
     'pointsAwarded', v_points,
     'maxPoints', v_max_points,
-    'evaluationMethod', case when v_is_timeout then 'timeout' else v_method end
+    'evaluationMethod', case when v_is_timeout then 'timeout' else v_method end,
+    'correctAnswer', v_correct_display
   );
 end;
 $$;

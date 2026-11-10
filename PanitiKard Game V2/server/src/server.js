@@ -61,8 +61,11 @@ function createApp({ catalogService = createCatalogService(), gameService = crea
         success: true,
         status: 'healthy',
         service: 'PanitiKard V2 Backend API',
-        environment: config.nodeEnv,
-        supabase: { ...getSupabaseStatus(), connectivity: database },
+        supabase: {
+          connectivity: {
+            reachable: Boolean(database?.reachable)
+          }
+        },
         timestamp: new Date().toISOString()
       });
     } catch (error) { next(error); }
@@ -76,7 +79,7 @@ function createApp({ catalogService = createCatalogService(), gameService = crea
     timestamp: new Date().toISOString()
   }));
 
-  app.use('/api/v1', createApiRouter({ catalogService, gameService, contentService, evaluatorService, authenticate, adminClientFactory }));
+  app.use('/api/v1', createApiRouter({ catalogService, gameService, contentService, evaluatorService, authenticate, adminClientFactory, connectivityCheck }));
 
   app.use((req, _res, next) => next(new HttpError(404, 'NOT_FOUND', `Route not found: ${req.method} ${req.path}`)));
   app.use((error, _req, res, _next) => {

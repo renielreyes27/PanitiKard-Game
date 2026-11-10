@@ -64,6 +64,8 @@
             pointsEarned,
             maxPoints: pointsPossible,
             feedback: evalResponse.feedback || '',
+            expectedAnswer: evalResponse.expectedAnswer || evalResponse.correctAnswer || '',
+            correctAnswer: evalResponse.correctAnswer || evalResponse.expectedAnswer || '',
             semanticScore: evalResponse.semanticScore ?? (evalResponse.isSemanticMatch ? 1.0 : 0.0),
             confidenceScore: evalResponse.confidenceScore ?? null,
             criteriaEvaluation: evalResponse.criteriaEvaluation || [],
@@ -121,6 +123,8 @@
         isCorrect: local.isCorrect,
         pointsEarned: 0, // Fallback NEVER awards points
         maxPoints: pointsPossible,
+        expectedAnswer: cardData.answer || '',
+        correctAnswer: cardData.answer || '',
         feedback: local.isCorrect
           ? 'Pansamantalang Pagsusuri (Offline Dev Mode): Tugma ang sagot sa lokal na pamantayan.'
           : 'Pansamantalang Pagsusuri (Offline Dev Mode): Hindi naabot ang lokal na pamantayan.',

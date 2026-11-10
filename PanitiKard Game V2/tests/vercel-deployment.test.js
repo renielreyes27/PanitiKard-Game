@@ -241,3 +241,254 @@ test("Vercel: main.js backendConfigured logic cleanly isolates unauthenticated v
     "Missing API object must always evaluate to false"
   );
 });
+
+test("Vercel: root package.json includes a valid build script and preserves the dev script", () => {
+  const pkgPath = path.join(v2Root, "package.json");
+  assert.ok(fs.existsSync(pkgPath), "Root package.json must exist");
+
+  const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+  assert.ok(pkg.scripts && typeof pkg.scripts === "object", "package.json must have scripts");
+  assert.equal(
+    typeof pkg.scripts.build,
+    "string",
+    "Root package.json must define a build script so Vercel npm run build succeeds"
+  );
+  assert.ok(pkg.scripts.build.trim().length > 0, "build script must not be empty");
+  assert.equal(
+    pkg.scripts.dev,
+    'concurrently -k -n BACKEND,FRONTEND "npm --prefix server run dev" "npx http-server . -p 8080"',
+    "Existing dev script must be preserved exactly"
+  );
+});
+
+function sliceBetween(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  assert.notEqual(start, -1, `Must find ${startMarker} in js/main.js`);
+  const end = source.indexOf(endMarker, start);
+  assert.notEqual(end, -1, `Must find ${endMarker} after ${startMarker} in js/main.js`);
+  return source.slice(start, end);
+}
+
+function buildMainSessionHarness() {
+  const mainJs = fs.readFileSync(path.join(v2Root, "js", "main.js"), "utf8");
+  const sessionFnsSrc = sliceBetween(mainJs, "function beginRemoteGameSession(", "function startRemoteTimer(");
+  const submitOpenSrc = sliceBetween(mainJs, "async function submitOpenEndedAnswer(", "function unlockNextIndex(");
+
+  const appState = {
+    studentName: "Juan",
+    remoteSessionId: null,
+    remoteQuestionCatalog: null,
+    remoteSessionPromise: null,
+    remoteSessionGeneration: 0,
+    remoteWriteQueue: Promise.resolve(),
+    isEvaluatingAnswer: false,
+    answers: {},
+    incorrectQuestions: [],
+    activeCardTypeIndex: 0,
+    highestUnlockedIndex: 0,
+    score: 0,
+    isReverseRound: false,
+    wrongQueue: []
+  };
+
+  let renderedOpenError = null;
+  const errorBox = {
+    id: "open-error-container",
+    className: "",
+    style: {},
+    innerHTML: "",
+    classList: {
+      remove: () => {},
+      add: () => {}
+    }
+  };
+  const submitBtn = { disabled: false, innerHTML: "Ipasa" };
+  const textarea = { disabled: false };
+
+  const fakeDocument = {
+    getElementById: (id) => {
+      if (id === "btn-submit-open") return submitBtn;
+      if (id === "open-answer-input") return textarea;
+      if (id === "open-error-container") return errorBox;
+      return null;
+    },
+    querySelector: (sel) => {
+      if (sel === ".open-card-form") {
+        return {
+          querySelector: () => null,
+          insertBefore: () => {},
+          appendChild: () => {}
+        };
+      }
+      return null;
+    },
+    createElement: () => errorBox
+  };
+
+  let activeGuestToken = null;
+  const evaluateCalls = [];
+  const submitAnswerCalls = [];
+  const fakeWindow = {
+    PANITIKARD_GAME_API: {
+      enabled: true,
+      hasSessionToken: () => Boolean(activeGuestToken),
+      hasAccessToken: () => Boolean(activeGuestToken),
+      setGuestToken: (tok) => { activeGuestToken = tok || null; },
+      getGuestToken: () => activeGuestToken,
+      clearGuestToken: () => { activeGuestToken = null; },
+      listQuestions: async () => ({ questions: [{ code: "elem-challenge", id: "elem-challenge" }] }),
+      createSession: async () => ({ id: "sess-default", sessionToken: "tok-default" }),
+      submitAnswer: async (sessionId, questionCode, response, round, options) => {
+        submitAnswerCalls.push({ sessionId, questionCode, response, round, options, token: activeGuestToken });
+        return { isCorrect: true, pointsAwarded: 1, totalScore: 1 };
+      }
+    }
+  };
+
+  const fakeApiClient = {
+    evaluateWrittenAnswer: async (opts) => {
+      evaluateCalls.push({ ...opts, tokenAtCallTime: activeGuestToken });
+      return {
+        success: true,
+        available: true,
+        isCorrect: true,
+        pointsEarned: 2,
+        maxPoints: 2,
+        feedback: "Mahusay!",
+        evaluationMethod: "deterministic-rubric",
+        criteriaEvaluation: []
+      };
+    }
+  };
+
+  const factory = new Function(
+    "window",
+    "document",
+    "appState",
+    "PANITIKARD_API_CLIENT",
+    `
+    const interactiveCard = { classList: { contains: () => false, add: () => {} } };
+    function stopChallengeTimer() {}
+    function hydrateDeckFromCatalog() {}
+    function evaluateOpenEndedAnswer() { return { isCorrect: true }; }
+    function unlockNextIndex() {}
+    function renderCardByTypeIndex() {}
+    ${sessionFnsSrc}
+    ${submitOpenSrc}
+    return { beginRemoteGameSession, persistRemoteAnswer, submitOpenEndedAnswer };
+    `
+  );
+
+  const fns = factory(fakeWindow, fakeDocument, appState, fakeApiClient);
+  return {
+    ...fns,
+    appState,
+    fakeWindow,
+    fakeApiClient,
+    evaluateCalls,
+    submitAnswerCalls,
+    errorBox,
+    getGuestToken: () => activeGuestToken,
+    setGuestToken: (tok) => { activeGuestToken = tok; }
+  };
+}
+
+test("Regression: Written-answer submission waits for pending session initialization and sends correct session ID and guest token", async () => {
+  const harness = buildMainSessionHarness();
+
+  let resolveSession;
+  harness.fakeWindow.PANITIKARD_GAME_API.createSession = () =>
+    new Promise((resolve) => {
+      resolveSession = () => {
+        harness.setGuestToken("guest-token-session-123");
+        resolve({ id: "00000000-0000-4000-8000-000000000123", sessionToken: "guest-token-session-123" });
+      };
+    });
+
+  // Start game session (promise remains pending)
+  harness.beginRemoteGameSession("elemento-ng-tula", "cards");
+  assert.equal(harness.appState.remoteSessionId, null, "remoteSessionId must still be null while session creation is in flight");
+  assert.ok(harness.appState.remoteSessionPromise, "remoteSessionPromise must be set");
+
+  // Student submits written answer before createSession finishes
+  const submitPromise = harness.submitOpenEndedAnswer(
+    "Ang tula ay may sukat at tugma.",
+    { id: "elem-challenge", points: 2 },
+    false
+  );
+
+  // Before resolving the session, evaluateWrittenAnswer must NOT have been called yet
+  await new Promise((r) => setTimeout(r, 15));
+  assert.equal(
+    harness.evaluateCalls.length,
+    0,
+    "evaluateWrittenAnswer must wait for pending remoteSessionPromise before firing"
+  );
+
+  // Now resolve the pending session initialization
+  resolveSession();
+  await submitPromise;
+
+  assert.equal(harness.evaluateCalls.length, 1, "evaluateWrittenAnswer must be called once session initialization resolves");
+  assert.equal(
+    harness.evaluateCalls[0].sessionId,
+    "00000000-0000-4000-8000-000000000123",
+    "evaluateWrittenAnswer must receive the resolved sessionId, not null"
+  );
+  assert.equal(
+    harness.evaluateCalls[0].tokenAtCallTime,
+    "guest-token-session-123",
+    "Guest token must be established before evaluateWrittenAnswer is called"
+  );
+});
+
+test("Regression: Failed session initialization does not send an evaluation request with a null session ID", async () => {
+  const harness = buildMainSessionHarness();
+
+  // Simulate previous session token to verify beginRemoteGameSession clears stale tokens
+  harness.setGuestToken("stale-token-from-previous-session");
+
+  harness.fakeWindow.PANITIKARD_GAME_API.createSession = async () => {
+    throw new Error("Network failure creating session");
+  };
+
+  harness.beginRemoteGameSession("elemento-ng-tula", "cards");
+  assert.equal(harness.getGuestToken(), null, "beginRemoteGameSession must clear any previous session guest token");
+
+  await harness.submitOpenEndedAnswer(
+    "Ang tula ay may sukat at tugma.",
+    { id: "elem-challenge", points: 2 },
+    false
+  );
+
+  assert.equal(
+    harness.evaluateCalls.length,
+    0,
+    "evaluateWrittenAnswer must NOT be called with a null sessionId when session initialization fails"
+  );
+  assert.match(
+    harness.errorBox.innerHTML,
+    /Hindi nakakonekta sa serbisyo ang session/i,
+    "Must display a clear session connection retry error message when session initialization fails"
+  );
+});
+
+test("Regression: Existing multiple-choice / remote answer persistence and guest gameplay still work", async () => {
+  const harness = buildMainSessionHarness();
+
+  harness.fakeWindow.PANITIKARD_GAME_API.createSession = async () => {
+    harness.setGuestToken("guest-token-mc-456");
+    return { id: "00000000-0000-4000-8000-000000000456", sessionToken: "guest-token-mc-456" };
+  };
+
+  harness.beginRemoteGameSession("elemento-ng-tula", "cards");
+  const result = await harness.persistRemoteAnswer("elem-challenge", "A", "main");
+
+  assert.ok(result, "persistRemoteAnswer must resolve with the server scoring result");
+  assert.equal(result.isCorrect, true);
+  assert.equal(harness.submitAnswerCalls.length, 1);
+  assert.equal(harness.submitAnswerCalls[0].sessionId, "00000000-0000-4000-8000-000000000456");
+  assert.equal(harness.submitAnswerCalls[0].questionCode, "elem-challenge");
+  assert.equal(harness.submitAnswerCalls[0].response, "A");
+  assert.equal(harness.submitAnswerCalls[0].token, "guest-token-mc-456");
+});

@@ -56,6 +56,7 @@ document.addEventListener("DOMContentLoaded", () => {
     remoteSessionGeneration: 0,
     remoteSessionPromise: null,
     remoteWriteQueue: Promise.resolve(),
+    startedRemoteTimers: {},
 
     // 30-Second Challenge Timer State
     challengeTimerId: null,
@@ -293,10 +294,17 @@ document.addEventListener("DOMContentLoaded", () => {
           defaultPoints: 1
         };
 
-    const rawChoices = q.dbChoices || q.choices || [];
+    const rawChoices = (Array.isArray(q.dbChoices) && q.dbChoices.length > 0)
+      ? q.dbChoices
+      : ((Array.isArray(q.options) && q.options.length > 0)
+        ? q.options
+        : (Array.isArray(q.choices) ? q.choices : []));
     const options = rawChoices.map((c, i) => {
-      const key = c.key || String.fromCharCode(65 + i);
-      return { key, text: c.text || c.label || "" };
+      if (typeof c === "string") {
+        return { key: String.fromCharCode(65 + i), text: c };
+      }
+      const key = (c && c.key) || String.fromCharCode(65 + i);
+      return { key, text: (c && (c.text || c.label)) || "" };
     });
 
     const isMultipleChoice = options.length > 0;
@@ -306,6 +314,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return {
       id: q.code || q.id,
       type: rawCategory,
+      questionType: q.questionType || (isMultipleChoice ? "multiple_choice" : "open_ended"),
       v1Type: rawCategory.charAt(0).toUpperCase() + rawCategory.slice(1),
       number: String(index + 1).padStart(2, "0"),
       tag: q.tag || q.categoryLabel || typeMeta.label || "Pagsusuri",
@@ -324,30 +333,101 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function mapCatalogQuestionToQuiz(q, index) {
-    const rawChoices = q.dbChoices || q.choices || [];
+    const rawChoices = (Array.isArray(q.dbChoices) && q.dbChoices.length > 0)
+      ? q.dbChoices
+      : ((Array.isArray(q.choices) && q.choices.length > 0)
+        ? q.choices
+        : (Array.isArray(q.options) ? q.options : []));
     const choices = rawChoices.map((c, i) => {
-      const key = c.key || String.fromCharCode(65 + i);
-      return { key, text: c.text || c.label || "" };
+      if (typeof c === "string") {
+        return { key: String.fromCharCode(65 + i), text: c };
+      }
+      const key = (c && c.key) || String.fromCharCode(65 + i);
+      return { key, text: (c && (c.text || c.label)) || "" };
     });
+    const rawTimeLimit = q.timeLimit ?? q.timeLimitSeconds ?? null;
+    const timeLimit = typeof rawTimeLimit === "number" && rawTimeLimit > 0 ? rawTimeLimit : null;
+    const explicitType = typeof q.questionType === "string" && q.questionType.trim()
+      ? q.questionType.trim()
+      : null;
+    const questionType = explicitType || (choices.length ? "multiple_choice" : "identification");
 
     return {
       id: q.code || q.id,
       number: index + 1,
       category: q.categoryLabel || q.tag || "Pagsusuri",
-      questionType: q.questionType || (choices.length ? "multiple_choice" : "identification"),
+      questionType: questionType,
       difficulty: q.difficulty || "average",
       points: typeof q.points === "number" ? q.points : 1,
-      question: q.prompt || "",
-      choices: choices.length ? choices : null,
+      timeLimit: timeLimit,
+      question: q.prompt || q.question || "",
+      choices: questionType === "multiple_choice" ? choices : (choices.length ? choices : null),
       answer: q.answerKey || q.expectedAnswer || "",
       acceptedAnswers: q.acceptedAnswers || [],
       explanation: q.explanation || ""
     };
   }
 
+  const BUNDLED_STATIC_TOPICS = new Set(["elements", "meaning", "alamat", "maikling-kwento"]);
+
+  const CANONICAL_CARD_CATEGORY_ORDER = {
+    question: 1,
+    statement: 2,
+    correction: 3,
+    bonus: 4,
+    reverse: 5,
+    help: 6,
+    challenge: 7
+  };
+
+  function compareNaturalCode(a, b) {
+    const codeA = String(a?.code || a?.id || "");
+    const codeB = String(b?.code || b?.id || "");
+    return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: "base" });
+  }
+
+  function sortCatalogCardQuestions(questions) {
+    return [...questions].sort((a, b) => {
+      const catA = a?.cardCategory || a?.type || "";
+      const catB = b?.cardCategory || b?.type || "";
+      const orderA = CANONICAL_CARD_CATEGORY_ORDER[catA] ?? 99;
+      const orderB = CANONICAL_CARD_CATEGORY_ORDER[catB] ?? 99;
+      if (orderA !== orderB) return orderA - orderB;
+      return compareNaturalCode(a, b);
+    });
+  }
+
+  function sortCatalogQuizQuestions(questions) {
+    return [...questions].sort(compareNaturalCode);
+  }
+
+  function resolveCorrectAnswerDisplay(rawAnswer, options) {
+    if (!rawAnswer || typeof rawAnswer !== "string") return "";
+    const trimmed = rawAnswer.trim();
+    if (!trimmed) return "";
+    if (Array.isArray(options) && options.length > 0) {
+      const rawKey = trimmed.includes(".") ? trimmed.split(".")[0].trim() : trimmed;
+      const found = options.find(o => (o.key || "").toLowerCase() === rawKey.toLowerCase());
+      if (found && found.text && !trimmed.toLowerCase().includes(found.text.toLowerCase())) {
+        return `${found.key || rawKey}. ${found.text}`;
+      }
+    }
+    return trimmed;
+  }
+
   function hydrateDeckFromCatalog(topicCode, catalog) {
-    if (!catalog || !Array.isArray(catalog.questions) || catalog.questions.length === 0) return;
+    if (!catalog || !Array.isArray(catalog.questions)) return;
     if (typeof PANITIKARD_DECKS === "undefined") return;
+
+    const isBundledStatic = BUNDLED_STATIC_TOPICS.has(topicCode);
+    if (catalog.questions.length === 0) {
+      if (!isBundledStatic && PANITIKARD_DECKS[topicCode]) {
+        PANITIKARD_DECKS[topicCode].cards = [];
+        PANITIKARD_DECKS[topicCode].questions = [];
+        PANITIKARD_DECKS[topicCode].cardCount = 0;
+      }
+      return;
+    }
 
     if (!PANITIKARD_DECKS[topicCode]) {
       const topicTitle = catalog.topic?.title || topicCode;
@@ -370,14 +450,24 @@ document.addEventListener("DOMContentLoaded", () => {
     const deck = PANITIKARD_DECKS[topicCode];
     const questions = catalog.questions;
 
-    const hasCardCategories = questions.some(q => Boolean(q.cardCategory));
-    const isQuizTopic = topicCode === "alamat" || topicCode === "maikling-kwento" || (!hasCardCategories && questions.length > 7);
+    const cardQuestions = sortCatalogCardQuestions(questions.filter(q => Boolean(q.cardCategory)));
+    const quizQuestions = sortCatalogQuizQuestions(questions.filter(q => !q.cardCategory));
+    const isQuizTopic = topicCode === "alamat" || topicCode === "maikling-kwento" || (cardQuestions.length === 0 && quizQuestions.length > 0);
 
     if (isQuizTopic) {
-      deck.questions = questions.map(mapCatalogQuestionToQuiz);
+      const targetQuizQuestions = quizQuestions.length > 0 ? quizQuestions : sortCatalogQuizQuestions(questions);
+      deck.questions = targetQuizQuestions.map(mapCatalogQuestionToQuiz);
+      if (!isBundledStatic && cardQuestions.length === 0) {
+        deck.cards = [];
+      }
       deck.cardCount = deck.questions.length;
     } else {
-      deck.cards = questions.map(mapCatalogQuestionToCard);
+      deck.cards = cardQuestions.map(mapCatalogQuestionToCard);
+      if (quizQuestions.length > 0) {
+        deck.questions = quizQuestions.map(mapCatalogQuestionToQuiz);
+      } else if (!isBundledStatic) {
+        deck.questions = [];
+      }
       deck.cardCount = deck.cards.length;
     }
   }
@@ -389,6 +479,32 @@ document.addEventListener("DOMContentLoaded", () => {
     topicsList.forEach((topic) => {
       if (!topic || !topic.code) return;
 
+      const isExplicitlyUnplayable =
+        topic.playable === false ||
+        (typeof topic.publishedQuestionCount === "number" && topic.publishedQuestionCount <= 0);
+
+      if (isExplicitlyUnplayable) {
+        if (!BUNDLED_STATIC_TOPICS.has(topic.code)) {
+          const staleRow = container.querySelector(`[data-dynamic-topic="${topic.code}"]`);
+          if (staleRow && typeof staleRow.remove === "function") {
+            staleRow.remove();
+          }
+          if (typeof PANITIKARD_DECKS !== "undefined" && PANITIKARD_DECKS[topic.code]) {
+            PANITIKARD_DECKS[topic.code].cards = [];
+            PANITIKARD_DECKS[topic.code].questions = [];
+            PANITIKARD_DECKS[topic.code].cardCount = 0;
+          }
+        }
+        return;
+      }
+
+      const publishedCount =
+        (typeof topic.deckQuestionCount === "number" && topic.deckQuestionCount > 0)
+          ? topic.deckQuestionCount
+          : ((typeof topic.quizQuestionCount === "number" && topic.quizQuestionCount > 0)
+            ? topic.quizQuestionCount
+            : (typeof topic.publishedQuestionCount === "number" && topic.publishedQuestionCount > 0 ? topic.publishedQuestionCount : 0));
+
       if (typeof PANITIKARD_DECKS !== "undefined" && !PANITIKARD_DECKS[topic.code]) {
         PANITIKARD_DECKS[topic.code] = {
           id: topic.code,
@@ -397,13 +513,15 @@ document.addEventListener("DOMContentLoaded", () => {
           themeClass: `deck-${topic.code}`,
           icon: "🎴",
           accentColor: "#185b55",
-          cardCount: 0,
+          cardCount: publishedCount,
           competency: topic.competency || "",
           description: topic.description || "",
           subtopics: [],
           cards: [],
           questions: []
         };
+      } else if (typeof PANITIKARD_DECKS !== "undefined" && PANITIKARD_DECKS[topic.code] && publishedCount > 0 && !BUNDLED_STATIC_TOPICS.has(topic.code)) {
+        PANITIKARD_DECKS[topic.code].cardCount = publishedCount;
       }
 
       const existing = container.querySelector(`.topic-card[data-deck-id="${topic.code}"]`);
@@ -453,13 +571,58 @@ document.addEventListener("DOMContentLoaded", () => {
     const api = window.PANITIKARD_GAME_API;
     if (!api || !api.enabled || typeof api.listTopics !== "function") return;
     try {
-      const topics = await api.listTopics();
+      const topics = await api.listTopics({ playableOnly: true });
       if (Array.isArray(topics) && topics.length > 0) {
         renderDynamicTopicCards(topics);
       }
     } catch (err) {
       console.warn("[Catalog] Unable to load published topics from server:", err.message);
     }
+  }
+
+  function resolveActiveStudentName() {
+    const fromState = typeof appState.studentName === "string" ? appState.studentName.trim() : "";
+    if (fromState.length >= 2) {
+      return fromState;
+    }
+
+    const inputEl = (typeof studentNameInput !== "undefined" && studentNameInput)
+      ? studentNameInput
+      : (typeof document !== "undefined" && typeof document.getElementById === "function" ? document.getElementById("student-name") : null);
+    const fromInput = inputEl && typeof inputEl.value === "string" ? inputEl.value.trim() : "";
+    if (fromInput.length >= 2) {
+      appState.studentName = fromInput;
+      if (typeof deckStudentName !== "undefined" && deckStudentName) {
+        deckStudentName.textContent = fromInput;
+      }
+      return fromInput;
+    }
+
+    const deckBadgeEl = (typeof deckStudentName !== "undefined" && deckStudentName)
+      ? deckStudentName
+      : (typeof document !== "undefined" && typeof document.getElementById === "function" ? document.getElementById("deck-student-name") : null);
+    const fromBadge = deckBadgeEl && typeof deckBadgeEl.textContent === "string" ? deckBadgeEl.textContent.trim() : "";
+    if (fromBadge.length >= 2 && fromBadge !== "-" && fromBadge !== "Mag-aaral") {
+      appState.studentName = fromBadge;
+      if (inputEl && !inputEl.value) inputEl.value = fromBadge;
+      return fromBadge;
+    }
+
+    try {
+      if (typeof sessionStorage !== "undefined") {
+        const fromSession = (sessionStorage.getItem("panitikard_student_name") || "").trim();
+        if (fromSession.length >= 2) {
+          appState.studentName = fromSession;
+          if (inputEl && !inputEl.value) inputEl.value = fromSession;
+          if (deckBadgeEl) deckBadgeEl.textContent = fromSession;
+          return fromSession;
+        }
+      }
+    } catch (_err) {
+      // Ignore storage errors
+    }
+
+    return fromState || fromInput || "";
   }
 
   // Optional backend persistence is active only when an authenticated token and API URL exist.
@@ -469,27 +632,121 @@ document.addEventListener("DOMContentLoaded", () => {
     appState.remoteQuestionCatalog = null;
     appState.remoteSessionPromise = null;
     appState.remoteWriteQueue = Promise.resolve();
+    appState.startedRemoteTimers = {};
     const api = window.PANITIKARD_GAME_API;
+    if (api && typeof api.clearGuestToken === "function") {
+      api.clearGuestToken();
+    }
     if (!api || !api.enabled) return;
+
+    const studentName = typeof resolveActiveStudentName === "function"
+      ? resolveActiveStudentName()
+      : (typeof appState.studentName === "string" ? appState.studentName.trim() : "");
+    const hasAuthenticatedUserToken =
+      typeof api.hasAccessToken === "function" &&
+      api.hasAccessToken() &&
+      !(typeof api.hasSessionToken === "function" && api.hasSessionToken());
+
+    if (!hasAuthenticatedUserToken && (!studentName || studentName.length < 2 || studentName.length > 120)) {
+      console.warn("[Session] Cannot start guest session: valid studentName (2-120 chars) is required.");
+      return;
+    }
+
     const generation = ++appState.remoteSessionGeneration;
     appState.remoteSessionPromise = Promise.all([
       api.listQuestions(topicCode, mode === "quiz" ? "quiz" : "cards"),
-      api.createSession(topicCode, mode, appState.studentName)
+      api.createSession(topicCode, mode, studentName)
     ]).then(([catalog, session]) => {
-      if (generation !== appState.remoteSessionGeneration) return;
+      if (generation !== appState.remoteSessionGeneration) {
+        if (!appState.remoteSessionId && typeof api.clearGuestToken === "function") {
+          api.clearGuestToken();
+        }
+        return null;
+      }
       appState.remoteQuestionCatalog = catalog;
-      appState.remoteSessionId = session && session.id;
+      appState.remoteSessionId = (session && session.id) || null;
       if (session && session.sessionToken && typeof api.setGuestToken === 'function') {
         api.setGuestToken(session.sessionToken);
       }
       if (catalog && Array.isArray(catalog.questions) && catalog.questions.length > 0) {
+        const activeIdx = appState.activeCardTypeIndex || 0;
+        const prevDeck = (typeof PANITIKARD_DECKS !== "undefined") ? PANITIKARD_DECKS[topicCode] : null;
+        const prevCard = prevDeck && Array.isArray(prevDeck.cards) ? prevDeck.cards[activeIdx] : null;
+        const prevCardId = prevCard ? prevCard.id : null;
+        const wasShowingFront = Boolean(
+          typeof interactiveCard !== "undefined" &&
+          interactiveCard &&
+          interactiveCard.classList &&
+          typeof interactiveCard.classList.contains === "function" &&
+          !interactiveCard.classList.contains("is-flipped")
+        );
+
         hydrateDeckFromCatalog(topicCode, catalog);
+
+        if (
+          mode === "deck" &&
+          appState.activeDeckId === topicCode &&
+          Object.keys(appState.answers || {}).length === 0
+        ) {
+          const nextDeck = (typeof PANITIKARD_DECKS !== "undefined") ? PANITIKARD_DECKS[topicCode] : null;
+          const nextCard = nextDeck && Array.isArray(nextDeck.cards) ? nextDeck.cards[activeIdx] : null;
+
+          if (!wasShowingFront) {
+            if (typeof renderCardByTypeIndex === "function") {
+              renderCardByTypeIndex(activeIdx);
+            }
+          } else {
+            if (nextCard && prevCardId && prevCardId !== nextCard.id && typeof renderCardByTypeIndex === "function") {
+              renderCardByTypeIndex(activeIdx);
+              if (interactiveCard && interactiveCard.classList && typeof interactiveCard.classList.toggle === "function") {
+                interactiveCard.classList.toggle("is-flipped", false);
+              }
+              if (interactiveCard && interactiveCard.dataset) {
+                interactiveCard.dataset.flipped = "false";
+              }
+              if (typeof setActiveCardFace === "function") setActiveCardFace(interactiveCard, false);
+              if (typeof updateFlipControlsState === "function") updateFlipControlsState(false);
+            }
+            if (nextCard && (nextCard.timeLimit || nextCard.timeLimitSeconds)) {
+              if (!appState.challengeTimerId && typeof startChallengeTimer === "function") {
+                startChallengeTimer(nextCard, true);
+              } else if (typeof startRemoteTimer === "function") {
+                startRemoteTimer(nextCard.id, "main");
+              }
+            }
+          }
+        } else if (
+          mode === "quiz" &&
+          typeof quizState !== "undefined" &&
+          quizState.activeQuizId === topicCode &&
+          Array.isArray(quizState.questions)
+        ) {
+          quizState.questions.forEach((quizQ) => {
+            const matchedCatalogQ = catalog.questions.find(cq => cq.code === quizQ.id || cq.id === quizQ.id);
+            if (matchedCatalogQ) {
+              const rawLimit = matchedCatalogQ.timeLimit ?? matchedCatalogQ.timeLimitSeconds ?? null;
+              if (typeof rawLimit === "number" && rawLimit > 0) {
+                quizQ.timeLimit = rawLimit;
+              }
+            }
+          });
+          const activeQuizQ = quizState.questions[quizState.currentIndex || 0];
+          const activeQuizLimit = activeQuizQ ? (activeQuizQ.timeLimit ?? activeQuizQ.timeLimitSeconds ?? null) : null;
+          if (activeQuizQ && !quizState.isSubmitted && typeof activeQuizLimit === "number" && activeQuizLimit > 0 && typeof startRemoteTimer === "function") {
+            startRemoteTimer(activeQuizQ.id, "main");
+          }
+        }
       }
-      return { session, catalog };
+      return { session, catalog, generation };
     }).catch((error) => {
       if (generation === appState.remoteSessionGeneration) {
+        appState.remoteSessionId = null;
+        if (typeof api.clearGuestToken === "function") {
+          api.clearGuestToken();
+        }
         console.warn("PanitiKard backend unavailable; continuing with local gameplay.", error.message);
       }
+      return null;
     });
   }
 
@@ -497,17 +754,40 @@ document.addEventListener("DOMContentLoaded", () => {
     const api = window.PANITIKARD_GAME_API;
     const sessionPromise = appState.remoteSessionPromise;
     if (!api || !sessionPromise) return Promise.resolve(null);
-    const writeTask = appState.remoteWriteQueue
+    const writeTask = (appState.remoteWriteQueue || Promise.resolve())
+      .catch(() => null)
       .then(() => sessionPromise)
-      .then(remote => {
+      .then(async (remote) => {
         if (!remote?.session?.id) return null;
-        const foundInPublishedCatalog = (remote.catalog?.questions || []).some(question =>
+        const catalogQuestions = remote.catalog?.questions || [];
+        const foundQuestion = catalogQuestions.find(question =>
           question.code === questionCode || question.id === questionCode
         );
-        if (!foundInPublishedCatalog) {
+        if (!foundQuestion) {
           console.warn(`Question ${questionCode} is absent from the published backend catalog; answer was not persisted.`);
           return null;
         }
+
+        const timerKey = `${round}:${questionCode}`;
+        const timerEntry = appState.startedRemoteTimers ? appState.startedRemoteTimers[timerKey] : null;
+        if (timerEntry && timerEntry.status === "pending" && timerEntry.promise && typeof timerEntry.promise.then === "function") {
+          await timerEntry.promise;
+        }
+
+        const catalogTimeLimit = foundQuestion.timeLimit ?? foundQuestion.timeLimitSeconds ?? null;
+        const isTimed =
+          (typeof catalogTimeLimit === "number" && catalogTimeLimit > 0) ||
+          (typeof options.timeLimit === "number" && options.timeLimit > 0) ||
+          options.isTimeout === true ||
+          Boolean(timerEntry);
+
+        if (isTimed) {
+          if (!timerEntry || timerEntry.status !== "started") {
+            const timerErr = timerEntry?.error || new Error("Question timer has not been started.");
+            throw timerErr;
+          }
+        }
+
         return api.submitAnswer(remote.session.id, questionCode, response, round, options);
       });
     appState.remoteWriteQueue = writeTask.catch((error) => {
@@ -518,16 +798,65 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function startRemoteTimer(questionCode, round = "main") {
+    if (!questionCode) return Promise.resolve(null);
+    if (!appState.startedRemoteTimers) {
+      appState.startedRemoteTimers = {};
+    }
+    const timerKey = `${round}:${questionCode}`;
+    const existing = appState.startedRemoteTimers[timerKey];
+    if (existing && (existing.status === "pending" || existing.status === "started")) {
+      return existing.promise;
+    }
+
     const api = window.PANITIKARD_GAME_API;
     const sessionPromise = appState.remoteSessionPromise;
-    if (!api || !sessionPromise || typeof api.startQuestionTimer !== "function") return Promise.resolve(null);
-    return sessionPromise.then(remote => {
-      if (!remote?.session?.id) return null;
-      return api.startQuestionTimer(remote.session.id, questionCode, round);
-    }).catch(err => {
-      console.warn("[Timer] Failed to record timer start on server:", err.message);
-      return null;
-    });
+    if (!api || !sessionPromise || typeof api.startQuestionTimer !== "function") {
+      return Promise.resolve(null);
+    }
+
+    const generation = appState.remoteSessionGeneration;
+    const entry = { status: "pending", promise: null, error: null };
+    appState.startedRemoteTimers[timerKey] = entry;
+
+    const timerTask = (appState.remoteWriteQueue || Promise.resolve())
+      .catch(() => null)
+      .then(() => sessionPromise)
+      .then((remote) => {
+        if (generation !== appState.remoteSessionGeneration) {
+          entry.status = "cancelled";
+          return null;
+        }
+        if (!remote?.session?.id) {
+          entry.status = "failed";
+          entry.error = new Error("Hindi nakakonekta sa serbisyo ang session para sa timer.");
+          throw entry.error;
+        }
+        const catalogQuestions = remote.catalog?.questions;
+        if (Array.isArray(catalogQuestions) && catalogQuestions.length > 0) {
+          const foundInPublishedCatalog = catalogQuestions.some(question =>
+            question.code === questionCode || question.id === questionCode
+          );
+          if (!foundInPublishedCatalog) {
+            entry.status = "started";
+            return null;
+          }
+        }
+        return api.startQuestionTimer(remote.session.id, questionCode, round).then((res) => {
+          entry.status = "started";
+          entry.error = null;
+          return res;
+        });
+      })
+      .catch((err) => {
+        entry.status = "failed";
+        entry.error = err;
+        console.warn("[Timer] Failed to record timer start on server:", err.message);
+        return null;
+      });
+
+    entry.promise = timerTask;
+    appState.remoteWriteQueue = timerTask.catch(() => null);
+    return timerTask;
   }
 
   function finishRemoteGameSession() {
@@ -771,10 +1100,54 @@ document.addEventListener("DOMContentLoaded", () => {
     if (validationText) validationText.textContent = "";
   }
 
+  function showDeckWarning(msg) {
+    if (typeof document === "undefined") return;
+    let banner = document.getElementById("deck-alert-banner");
+    let textEl = document.getElementById("deck-alert-text");
+    if (!banner) {
+      const wrapper = document.querySelector(".deck-screen-wrapper");
+      if (wrapper) {
+        banner = document.createElement("div");
+        banner.id = "deck-alert-banner";
+        banner.className = "alert-box alert-error";
+        banner.setAttribute("role", "alert");
+        textEl = document.createElement("span");
+        textEl.id = "deck-alert-text";
+        banner.appendChild(textEl);
+        wrapper.prepend(banner);
+      }
+    }
+    if (textEl) textEl.textContent = msg;
+    if (banner) {
+      banner.classList.remove("hidden");
+      if (typeof banner.scrollIntoView === "function") {
+        banner.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    }
+  }
+
+  function hideDeckWarning() {
+    if (typeof document === "undefined") return;
+    const banner = document.getElementById("deck-alert-banner");
+    const textEl = document.getElementById("deck-alert-text");
+    if (banner) banner.classList.add("hidden");
+    if (textEl) textEl.textContent = "";
+  }
+
   if (studentNameInput) {
+    const initialInputName = studentNameInput.value.trim();
+    if (initialInputName.length >= 2 && !appState.studentName) {
+      appState.studentName = initialInputName;
+      if (deckStudentName) deckStudentName.textContent = initialInputName;
+    }
+
     studentNameInput.addEventListener("input", () => {
-      if (studentNameInput.value.trim().length > 0) {
+      const trimmed = studentNameInput.value.trim();
+      if (trimmed.length > 0) {
         hideValidation();
+      }
+      if (trimmed.length >= 2) {
+        appState.studentName = trimmed;
       }
     });
   }
@@ -788,14 +1161,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
       const name = studentNameInput ? studentNameInput.value.trim() : "";
 
-      if (!name) {
+      if (!name || name.length < 2) {
         showValidation("Pakilagay muna ang iyong buong pangalan bago magpatuloy.");
         if (studentNameInput) studentNameInput.focus();
         return;
       }
 
       appState.studentName = name;
+      try {
+        if (typeof sessionStorage !== "undefined") {
+          sessionStorage.setItem("panitikard_student_name", name);
+        }
+      } catch (_err) {
+        // Ignore storage errors
+      }
       hideValidation();
+      hideDeckWarning();
 
       // Update player name badge on Screen 3 (Deck Screen)
       if (deckStudentName) {
@@ -862,15 +1243,26 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleTopicSelection(deckId) {
+    hideDeckWarning();
     selectDeck(deckId);
+
+    const resolvedName = resolveActiveStudentName();
+    if ((!resolvedName || resolvedName.length < 2) && screens.setup) {
+      navigateToScreen(screens.setup);
+      showValidation("Pakilagay muna ang iyong buong pangalan bago pumili ng paksa.");
+      if (studentNameInput) studentNameInput.focus();
+      return false;
+    }
+
     const api = window.PANITIKARD_GAME_API;
     const deck = (typeof PANITIKARD_DECKS !== "undefined") ? PANITIKARD_DECKS[deckId] : null;
+    const isBundledStatic = BUNDLED_STATIC_TOPICS.has(deckId);
 
-    // If deck has no cards/questions yet and backend is enabled, fetch questions first
-    if (api && api.enabled && typeof api.listQuestions === "function" && (!deck || (!deck.cards?.length && !deck.questions?.length))) {
+    // Fetch published questions from backend when backend is enabled
+    if (api && api.enabled && typeof api.listQuestions === "function" && (!deck || (!deck.cards?.length && !deck.questions?.length) || !isBundledStatic)) {
       try {
         const catalog = await api.listQuestions(deckId);
-        if (catalog && Array.isArray(catalog.questions) && catalog.questions.length > 0) {
+        if (catalog && Array.isArray(catalog.questions)) {
           hydrateDeckFromCatalog(deckId, catalog);
         }
       } catch (err) {
@@ -879,11 +1271,24 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const currentDeck = (typeof PANITIKARD_DECKS !== "undefined") ? PANITIKARD_DECKS[deckId] : null;
-    if (deckId === "alamat" || deckId === "maikling-kwento" || (currentDeck && currentDeck.questions?.length && !currentDeck.cards?.length)) {
-      startQuiz(deckId);
-    } else {
-      startDeckSession();
+    const hasPlayableCards = Boolean(currentDeck && Array.isArray(currentDeck.cards) && currentDeck.cards.length > 0);
+    const hasPlayableQuiz = Boolean(currentDeck && Array.isArray(currentDeck.questions) && currentDeck.questions.length > 0);
+
+    if (!hasPlayableCards && !hasPlayableQuiz) {
+      showDeckWarning("Wala pang inilathalang tanong o kard para sa paksang ito. Pakipili ang ibang paksa.");
+      return false;
     }
+
+    if (deckId === "alamat" || deckId === "maikling-kwento" || (hasPlayableQuiz && !hasPlayableCards)) {
+      if (!hasPlayableQuiz) {
+        showDeckWarning("Wala pang inilathalang tanong sa pagsusulit para sa paksang ito. Pakipili ang ibang paksa.");
+        return false;
+      }
+      startQuiz(deckId);
+      return true;
+    }
+
+    return startDeckSession();
   }
 
   const allTopicCards = document.querySelectorAll(".topic-card, .deck-box");
@@ -907,6 +1312,23 @@ document.addEventListener("DOMContentLoaded", () => {
   // 8. Gameplay Session Start & Card Arena Lifecycle
   // ------------------------------------------------------------------------
   function startDeckSession() {
+    const deck = PANITIKARD_DECKS[appState.activeDeckId];
+    if (!deck || !Array.isArray(deck.cards) || deck.cards.length === 0) {
+      showDeckWarning("Wala pang inilathalang kard para sa paksang ito. Pakipili ang ibang paksa.");
+      return false;
+    }
+
+    const resolvedName = resolveActiveStudentName();
+    if ((!resolvedName || resolvedName.length < 2) && screens.setup) {
+      navigateToScreen(screens.setup);
+      showValidation("Pakilagay muna ang iyong buong pangalan bago magsimula ng laro.");
+      if (studentNameInput) studentNameInput.focus();
+      return false;
+    }
+
+    hideDeckWarning();
+    deck.cardCount = deck.cards.length;
+
     // Reset gameplay state for new session
     appState.lastPlayedMode = "deck";
     appState.answers = {};
@@ -930,8 +1352,6 @@ document.addEventListener("DOMContentLoaded", () => {
     reverseState.timerId = null;
     reverseState.secondsRemaining = 0;
 
-    const deck = PANITIKARD_DECKS[appState.activeDeckId];
-    if (!deck) return;
     beginRemoteGameSession(appState.activeDeckId, "deck");
 
     if (cardDeckIndicator) {
@@ -943,6 +1363,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     renderCardByTypeIndex(0);
     navigateToScreen(screens.card);
+    return true;
   }
 
   /**
@@ -1073,7 +1494,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (btnNextCard) {
       const deck = (typeof PANITIKARD_DECKS !== "undefined") ? PANITIKARD_DECKS[appState.activeDeckId] : null;
-      const totalCards = deck?.cards?.length || 7;
+      const totalCards = deck && Array.isArray(deck.cards) ? deck.cards.length : 0;
       if (!isSubmitted) {
         btnNextCard.disabled = true;
         btnNextCard.innerHTML = `<span>Susunod &rarr;</span>`;
@@ -1311,13 +1732,17 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderCardBackContent(cardData, isSubmitted, submission) {
     // Populate the evaluation shown on the same card's reverse face.
     if (backAnswerHighlight) {
+      const resolvedAnswer = (submission && (submission.correctAnswer || submission.expectedAnswer)) ||
+        cardData.answer ||
+        "";
       if (cardData.options && cardData.options.length > 0) {
-        const correctOpt = cardData.options.find(o => o.key === cardData.answer);
+        const rawKey = resolvedAnswer.includes(".") ? resolvedAnswer.split(".")[0].trim() : resolvedAnswer.trim();
+        const correctOpt = cardData.options.find(o => (o.key || "").toLowerCase() === rawKey.toLowerCase());
         backAnswerHighlight.textContent = correctOpt
-          ? `${cardData.answer} · ${correctOpt.text}`
-          : cardData.answer;
+          ? `${correctOpt.key} · ${correctOpt.text}`
+          : (resolvedAnswer || "—");
       } else {
-        backAnswerHighlight.textContent = cardData.answer || "—";
+        backAnswerHighlight.textContent = resolvedAnswer || "—";
       }
     }
 
@@ -1410,7 +1835,24 @@ document.addEventListener("DOMContentLoaded", () => {
     if (appState.answers[cardData.id]) return;
     if (interactiveCard.classList.contains("is-flipped")) return;
 
-    const isCorrect = (selectedKey === cardData.answer);
+    stopChallengeTimer();
+
+    const cardTimeLimit = cardData.timeLimit || cardData.timeLimitSeconds || null;
+    const backendActive = Boolean(
+      window.PANITIKARD_GAME_API &&
+      window.PANITIKARD_GAME_API.enabled &&
+      appState.remoteSessionPromise
+    );
+    if (backendActive && typeof cardTimeLimit === "number" && cardTimeLimit > 0) {
+      const timerEntry = appState.startedRemoteTimers ? appState.startedRemoteTimers[`main:${cardData.id}`] : null;
+      if (!timerEntry || timerEntry.status === "failed") {
+        console.warn("[Main] Cannot score timed multiple-choice answer: question timer failed to start.");
+        return;
+      }
+    }
+
+    let initialCorrect = resolveCorrectAnswerDisplay(cardData.answer, cardData.options) || cardData.answer || "";
+    const isCorrect = Boolean(cardData.answer && selectedKey === cardData.answer);
     const pointsEarned = isCorrect ? cardData.points : 0;
 
     appState.answers[cardData.id] = {
@@ -1421,7 +1863,7 @@ document.addEventListener("DOMContentLoaded", () => {
       title: cardData.title,
       prompt: cardData.prompt,
       userAnswer: selectedKey,
-      correctAnswer: cardData.answer,
+      correctAnswer: initialCorrect,
       isCorrect: isCorrect,
       pointsEarned: pointsEarned,
       maxPoints: cardData.points,
@@ -1429,7 +1871,31 @@ document.addEventListener("DOMContentLoaded", () => {
       terms: cardData.terms,
       submittedAt: new Date().toISOString()
     };
-    persistRemoteAnswer(cardData.id, selectedKey, "main");
+    const persistPromise = persistRemoteAnswer(cardData.id, selectedKey, "main", { timeLimit: cardTimeLimit });
+    if (persistPromise && typeof persistPromise.catch === "function") {
+      persistPromise.then((officialResult) => {
+        if (officialResult) {
+          const rec = appState.answers[cardData.id];
+          if (rec) {
+            if (typeof officialResult.isCorrect === "boolean") rec.isCorrect = officialResult.isCorrect;
+            if (typeof officialResult.pointsAwarded === "number") rec.pointsEarned = officialResult.pointsAwarded;
+            if (officialResult.correctAnswer) {
+              rec.correctAnswer = resolveCorrectAnswerDisplay(officialResult.correctAnswer, cardData.options);
+            }
+          }
+          if (officialResult.correctAnswer) {
+            cardData.answer = officialResult.correctAnswer;
+          }
+          const isSubmitted = Boolean(rec);
+          renderCardBackContent(cardData, isSubmitted, rec);
+        }
+      }).catch((err) => {
+        if (cardTimeLimit && appState.startedRemoteTimers?.[`main:${cardData.id}`]?.status === "failed") {
+          delete appState.answers[cardData.id];
+        }
+        console.warn("[Main] Multiple-choice official persistence failed:", err.message);
+      });
+    }
 
     // Record incorrect question for Reverse Round
     if (!isCorrect) {
@@ -1520,6 +1986,7 @@ document.addEventListener("DOMContentLoaded", () => {
       window.PANITIKARD_GAME_API.enabled
     );
 
+    const sessionGeneration = appState.remoteSessionGeneration;
     let evalResult;
     try {
       if (isTimeout) {
@@ -1533,25 +2000,97 @@ document.addEventListener("DOMContentLoaded", () => {
           evaluationMethod: "timeout",
           criteriaEvaluation: []
         };
-      } else if (typeof PANITIKARD_API_CLIENT !== "undefined" && typeof PANITIKARD_API_CLIENT.evaluateWrittenAnswer === "function") {
-        evalResult = await PANITIKARD_API_CLIENT.evaluateWrittenAnswer({
-          questionCode: cardData.id,
-          studentAnswer: answerText,
-          cardData,
-          sessionId: appState.remoteSessionId || null,
-          // Allow local rubric fallback only when no backend is configured (standalone classroom mode)
-          allowOfflineDevFallback: !backendConfigured
-        });
       } else {
-        evalResult = {
-          success: false,
-          available: false,
-          isCorrect: false,
-          pointsEarned: 0,
-          maxPoints: cardData.points || 1,
-          feedback: "Hindi maabot ang serbisyo ng AI para sa pagsusuri. Pakisubukang muli.",
-          evaluationMethod: "unavailable"
-        };
+        const gameApi = window.PANITIKARD_GAME_API;
+        let activeSessionId = appState.remoteSessionId || null;
+
+        if (backendConfigured) {
+          const pendingSessionPromise = appState.remoteSessionPromise;
+          if (!activeSessionId && pendingSessionPromise && typeof pendingSessionPromise.then === "function") {
+            const initialized = await pendingSessionPromise.catch(() => null);
+            if (sessionGeneration !== appState.remoteSessionGeneration) {
+              return;
+            }
+            if (initialized && initialized.generation === sessionGeneration && initialized.session && initialized.session.id) {
+              activeSessionId = initialized.session.id;
+            } else {
+              activeSessionId = appState.remoteSessionId || null;
+            }
+          }
+
+          if (sessionGeneration !== appState.remoteSessionGeneration) {
+            return;
+          }
+
+          const hasToken = Boolean(
+            gameApi && (
+              (typeof gameApi.hasSessionToken === "function" && gameApi.hasSessionToken()) ||
+              (typeof gameApi.hasAccessToken === "function" && gameApi.hasAccessToken())
+            )
+          );
+
+          if (!activeSessionId || typeof activeSessionId !== "string" || !activeSessionId.trim() || !hasToken) {
+            evalResult = {
+              success: false,
+              available: false,
+              isCorrect: false,
+              pointsEarned: 0,
+              maxPoints: cardData.points || 1,
+              feedback: "Hindi nakakonekta sa serbisyo ang session. Pakisubukang muli ang pagsusumite.",
+              errorCode: "SESSION_UNAVAILABLE",
+              evaluationMethod: "unavailable"
+            };
+          } else {
+            const cardTimeLimit = cardData.timeLimit || cardData.timeLimitSeconds || null;
+            const timerEntry = appState.startedRemoteTimers ? appState.startedRemoteTimers[`main:${cardData.id}`] : null;
+            if (timerEntry || (typeof cardTimeLimit === "number" && cardTimeLimit > 0)) {
+              if (timerEntry && timerEntry.status === "pending" && timerEntry.promise && typeof timerEntry.promise.then === "function") {
+                await timerEntry.promise;
+                if (sessionGeneration !== appState.remoteSessionGeneration) {
+                  return;
+                }
+              }
+              if (!timerEntry || timerEntry.status !== "started") {
+                evalResult = {
+                  success: false,
+                  available: false,
+                  isCorrect: false,
+                  pointsEarned: 0,
+                  maxPoints: cardData.points || 1,
+                  feedback: "Hindi nasimulan ang opisyal na timer para sa tanong na ito. Pakisubukang muli.",
+                  errorCode: "TIMER_NOT_STARTED",
+                  evaluationMethod: "unavailable"
+                };
+              }
+            }
+          }
+        }
+
+        if (!evalResult) {
+          if (typeof PANITIKARD_API_CLIENT !== "undefined" && typeof PANITIKARD_API_CLIENT.evaluateWrittenAnswer === "function") {
+            evalResult = await PANITIKARD_API_CLIENT.evaluateWrittenAnswer({
+              questionCode: cardData.id,
+              studentAnswer: answerText,
+              cardData,
+              sessionId: activeSessionId,
+              // Allow local rubric fallback only when no backend is configured (standalone classroom mode)
+              allowOfflineDevFallback: !backendConfigured
+            });
+            if (sessionGeneration !== appState.remoteSessionGeneration) {
+              return;
+            }
+          } else {
+            evalResult = {
+              success: false,
+              available: false,
+              isCorrect: false,
+              pointsEarned: 0,
+              maxPoints: cardData.points || 1,
+              feedback: "Hindi maabot ang serbisyo ng AI para sa pagsusuri. Pakisubukang muli.",
+              evaluationMethod: "unavailable"
+            };
+          }
+        }
       }
     } catch (evalErr) {
       console.warn("[Main] Error during answer evaluation:", evalErr);
@@ -1626,7 +2165,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // Persist to authoritative backend session via submit_game_answer
     let officialRecord = null;
     try {
-      officialRecord = await persistRemoteAnswer(cardData.id, answerText, "main", { isTimeout });
+      officialRecord = await persistRemoteAnswer(cardData.id, answerText, "main", {
+        isTimeout,
+        timeLimit: cardData.timeLimit || cardData.timeLimitSeconds || null
+      });
     } catch (persistErr) {
       console.warn("[Main] Failed to record answer to official game session:", persistErr.message);
       renderOpenCardError(`Hindi maitala ang opisyal na marka sa iyong sesyon (${persistErr.message || "Network Error"}). Pakisubukang muli.`);
@@ -1663,6 +2205,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const authoritativePoints = isOfficialValid ? rawPoints : evalResult.pointsEarned;
     const authoritativeCorrect = isOfficialValid ? rawCorrect : evalResult.isCorrect;
 
+    const referenceAnswer = officialRecord?.correctAnswer ||
+      evalResult?.expectedAnswer ||
+      evalResult?.correctAnswer ||
+      cardData.answer ||
+      "";
+
+    if (referenceAnswer && !cardData.answer) {
+      cardData.answer = referenceAnswer;
+    }
+
     appState.answers[cardData.id] = {
       cardId: cardData.id,
       type: cardData.type,
@@ -1671,7 +2223,8 @@ document.addEventListener("DOMContentLoaded", () => {
       title: cardData.title,
       prompt: cardData.prompt,
       userAnswer: answerText,
-      correctAnswer: cardData.answer,
+      correctAnswer: referenceAnswer,
+      expectedAnswer: referenceAnswer,
       isCorrect: authoritativeCorrect,
       pointsEarned: authoritativePoints,
       maxPoints: cardData.points || 1,
@@ -1684,7 +2237,7 @@ document.addEventListener("DOMContentLoaded", () => {
       evaluationMethod: officialRecord?.evaluationMethod || officialRecord?.answer?.evaluationMethod || evalResult.evaluationMethod || "submit_game_answer",
       evaluationContext: {
         question: cardData.prompt,
-        expectedAnswer: cardData.answer,
+        expectedAnswer: referenceAnswer,
         rubricGroups: cardData.terms || [],
         studentAnswer: answerText
       },
@@ -1704,7 +2257,7 @@ document.addEventListener("DOMContentLoaded", () => {
           category: cardData.tag || "Pagsusuri",
           questionType: "open_ended",
           choices: null,
-          answer: cardData.answer,
+          answer: referenceAnswer || cardData.answer,
           explanation: cardData.explanation,
           terms: cardData.terms,
           points: cardData.points || 1,
@@ -1719,8 +2272,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function unlockNextIndex() {
+    const deck = (typeof PANITIKARD_DECKS !== "undefined") ? PANITIKARD_DECKS[appState.activeDeckId] : null;
+    const maxIndex = deck && Array.isArray(deck.cards) && deck.cards.length > 0
+      ? deck.cards.length - 1
+      : 0;
     if (appState.activeCardTypeIndex >= appState.highestUnlockedIndex) {
-      appState.highestUnlockedIndex = Math.min(appState.activeCardTypeIndex + 1, 6);
+      appState.highestUnlockedIndex = Math.min(appState.activeCardTypeIndex + 1, maxIndex);
     }
   }
 
@@ -1732,6 +2289,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!preserveRemaining || appState.challengeSecondsRemaining <= 0) {
       appState.challengeSecondsRemaining = cardData.timeLimit || 30;
+    }
+    if (cardData && cardData.id && typeof startRemoteTimer === "function") {
       startRemoteTimer(cardData.id, "main");
     }
     if (timerSeconds) {
@@ -1987,6 +2546,11 @@ document.addEventListener("DOMContentLoaded", () => {
     quizState.selectedOption = null;
     quizState.isSubmitted = false;
 
+    const quizTimeLimit = getQuestionTimeLimit(q);
+    if (quizTimeLimit && q.id && typeof startRemoteTimer === "function") {
+      startRemoteTimer(q.id, "main");
+    }
+
     const currentNum = quizState.currentIndex + 1;
     const totalNum = quizState.questions.length;
     const pct = Math.round((currentNum / totalNum) * 100);
@@ -2033,8 +2597,13 @@ document.addEventListener("DOMContentLoaded", () => {
       if (q.questionType === "multiple_choice") {
         const grid = document.createElement("div");
         grid.className = "quiz-mc-grid";
+        const mcChoices = Array.isArray(q.choices) ? q.choices : [];
 
-        (q.choices || []).forEach((c) => {
+        if (mcChoices.length === 0 && btnQuizSubmit) {
+          btnQuizSubmit.disabled = true;
+        }
+
+        mcChoices.forEach((c) => {
           const btn = document.createElement("button");
           btn.type = "button";
           btn.className = "quiz-mc-option";
@@ -2147,6 +2716,24 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const quizTimeLimit = getQuestionTimeLimit(q);
+    const backendActive = Boolean(
+      window.PANITIKARD_GAME_API &&
+      window.PANITIKARD_GAME_API.enabled &&
+      appState.remoteSessionPromise
+    );
+    if (backendActive && quizTimeLimit) {
+      const timerEntry = appState.startedRemoteTimers ? appState.startedRemoteTimers[`main:${q.id}`] : null;
+      if (!timerEntry || timerEntry.status === "failed") {
+        if (quizAlertBox) {
+          quizAlertBox.classList.remove("hidden");
+          const alertText = quizAlertBox.querySelector("#quiz-alert-text");
+          if (alertText) alertText.textContent = "Hindi nasimulan ang opisyal na timer para sa tanong na ito. Pakisubukang muli.";
+        }
+        return;
+      }
+    }
+
     quizState.isSubmitted = true;
 
     if (btnQuizSubmit) btnQuizSubmit.disabled = true;
@@ -2179,11 +2766,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     }
 
-    let correctDisplay = q.answer;
-    if (q.questionType === "multiple_choice" && q.choices) {
-      const found = q.choices.find(c => c.key === q.answer);
-      if (found) correctDisplay = `${q.answer}. ${found.text}`;
-    }
+    let correctDisplay = resolveCorrectAnswerDisplay(q.answer, q.choices) || q.answer || "";
 
     // Record quiz answer
     quizState.userAnswers[q.id] = {
@@ -2205,7 +2788,31 @@ document.addEventListener("DOMContentLoaded", () => {
         studentAnswer: studentInput
       } : null
     };
-    persistRemoteAnswer(q.id, studentInput, "main");
+    const persistPromise = persistRemoteAnswer(q.id, studentInput, "main", { timeLimit: quizTimeLimit });
+    if (persistPromise && typeof persistPromise.catch === "function") {
+      persistPromise.then((officialResult) => {
+        if (officialResult) {
+          const rec = quizState.userAnswers[q.id];
+          if (rec) {
+            if (typeof officialResult.isCorrect === "boolean") rec.isCorrect = officialResult.isCorrect;
+            if (typeof officialResult.pointsAwarded === "number") rec.pointsEarned = officialResult.pointsAwarded;
+            if (officialResult.correctAnswer) {
+              rec.correctAnswer = resolveCorrectAnswerDisplay(officialResult.correctAnswer, q.choices);
+            }
+          }
+          if (officialResult.correctAnswer) {
+            q.answer = officialResult.correctAnswer;
+          }
+        }
+      }).catch((err) => {
+        if (quizTimeLimit && appState.startedRemoteTimers?.[`main:${q.id}`]?.status === "failed") {
+          quizState.currentScore = Math.max(0, quizState.currentScore - pointsEarned);
+          delete quizState.userAnswers[q.id];
+          if (quizCurrentScore) quizCurrentScore.textContent = String(quizState.currentScore);
+        }
+        console.warn("[Quiz] Official answer persistence failed:", err.message);
+      });
+    }
 
     // Record incorrect question for Reverse Round
     if (!isCorrect) {
@@ -2407,6 +3014,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!preserveRemaining || reverseState.secondsRemaining <= 0) {
       reverseState.secondsRemaining = timeLimit;
+    }
+    if (q && q.id && typeof startRemoteTimer === "function") {
       startRemoteTimer(q.id, "reverse");
     }
 
@@ -2668,6 +3277,23 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const revTimeLimit = getQuestionTimeLimit(q);
+    const backendActive = Boolean(
+      window.PANITIKARD_GAME_API &&
+      window.PANITIKARD_GAME_API.enabled &&
+      appState.remoteSessionPromise
+    );
+    if (backendActive && revTimeLimit) {
+      const timerEntry = appState.startedRemoteTimers ? appState.startedRemoteTimers[`reverse:${q.id}`] : null;
+      if (!timerEntry || timerEntry.status === "failed") {
+        if (reverseAlertBox) reverseAlertBox.classList.remove("hidden");
+        if (reverseAlertText) {
+          reverseAlertText.textContent = "Hindi nasimulan ang opisyal na timer para sa tanong na ito. Pakisubukang muli.";
+        }
+        return;
+      }
+    }
+
     reverseState.isSubmitted = true;
     reverseState.attemptsRemaining = Math.max(0, reverseState.attemptsRemaining - 1);
     updateReverseAttemptUI();
@@ -2721,11 +3347,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Correct Answer Display Text
-    let correctDisplay = q.answer;
-    if (q.questionType === "multiple_choice" && Array.isArray(q.choices)) {
-      const found = q.choices.find(c => c.key === q.answer);
-      if (found) correctDisplay = `${q.answer}. ${found.text}`;
-    }
+    const reverseChoices = q.choices || (q.originalCard && q.originalCard.options);
+    let correctDisplay = resolveCorrectAnswerDisplay(q.answer, reverseChoices) || q.answer || "";
 
     // Record reverse attempt separately (main round records remain untouched)
     reverseState.answers[q.id] = {
@@ -2751,7 +3374,33 @@ document.addEventListener("DOMContentLoaded", () => {
         studentAnswer: studentInput
       } : null
     };
-    persistRemoteAnswer(q.id, studentInput, "reverse", { isTimeout });
+    const persistPromise = persistRemoteAnswer(q.id, studentInput, "reverse", { isTimeout, timeLimit: revTimeLimit });
+    if (persistPromise && typeof persistPromise.catch === "function") {
+      persistPromise.then((officialResult) => {
+        if (officialResult) {
+          const revRec = reverseState.answers[q.id];
+          if (revRec) {
+            if (typeof officialResult.isCorrect === "boolean") revRec.isCorrect = officialResult.isCorrect;
+            if (typeof officialResult.pointsAwarded === "number") revRec.pointsEarned = officialResult.pointsAwarded;
+            if (officialResult.correctAnswer) {
+              revRec.correctAnswer = resolveCorrectAnswerDisplay(officialResult.correctAnswer, reverseChoices);
+            }
+          }
+          if (officialResult.correctAnswer) {
+            q.answer = officialResult.correctAnswer;
+          }
+        }
+      }).catch((err) => {
+        if (revTimeLimit && appState.startedRemoteTimers?.[`reverse:${q.id}`]?.status === "failed") {
+          if (isCorrect) {
+            reverseState.pointsEarned = Math.max(0, reverseState.pointsEarned - pointsEarned);
+            if (reverseScoreText) reverseScoreText.textContent = `+${reverseState.pointsEarned} Puntos`;
+          }
+          delete reverseState.answers[q.id];
+        }
+        console.warn("[Reverse] Official answer persistence failed:", err.message);
+      });
+    }
 
     // Render Formative Feedback Box
     if (reverseFeedbackBox) {
@@ -2951,6 +3600,13 @@ document.addEventListener("DOMContentLoaded", () => {
           terms: card.terms
         };
 
+        const rawRef = record.correctAnswer ||
+          record.expectedAnswer ||
+          card.answer ||
+          (record.evaluationContext && record.evaluationContext.expectedAnswer) ||
+          "";
+        const formattedRef = resolveCorrectAnswerDisplay(rawRef, card.options) || rawRef || "Walang nakatalagang batayang sagot";
+
         const typeMeta = PANITIKARD_CARD_TYPES[card.type] || {
           icon: "🎴",
           label: card.type
@@ -2984,7 +3640,7 @@ document.addEventListener("DOMContentLoaded", () => {
               <strong>👤 Iyong Sagot:</strong> ${escapeHtml(record.userAnswer)}
             </div>
             <div class="correct-ans-line">
-              <strong>✓ Tamang Sagot / Batayan:</strong> ${escapeHtml(card.answer)}
+              <strong>✓ Tamang Sagot / Batayan:</strong> ${escapeHtml(formattedRef)}
             </div>
           </div>
 
@@ -3097,6 +3753,12 @@ document.addEventListener("DOMContentLoaded", () => {
           explanation: q.explanation
         };
 
+        const rawQuizRef = record.correctAnswer ||
+          q.answer ||
+          (record.evaluationContext && record.evaluationContext.expectedAnswer) ||
+          "";
+        const formattedQuizRef = resolveCorrectAnswerDisplay(rawQuizRef, q.choices) || rawQuizRef || "Walang nakatalagang tamang sagot";
+
         const itemCard = document.createElement("div");
         itemCard.className = `result-item-card ${record.isCorrect ? "result-item-correct" : "result-item-incorrect"}`;
 
@@ -3118,7 +3780,7 @@ document.addEventListener("DOMContentLoaded", () => {
               <strong>👤 Iyong Sagot:</strong> ${escapeHtml(record.userAnswer)}
             </div>
             <div class="correct-ans-line">
-              <strong>✓ Tamang Sagot:</strong> ${escapeHtml(record.correctAnswer)}
+              <strong>✓ Tamang Sagot:</strong> ${escapeHtml(formattedQuizRef)}
             </div>
           </div>
 
@@ -3159,6 +3821,12 @@ document.addEventListener("DOMContentLoaded", () => {
     resultBreakdownList.appendChild(divider);
 
     Object.values(reverseState.answers).forEach((revAns, revIdx) => {
+      const rawRevRef = revAns.correctAnswer ||
+        revAns.answer ||
+        (revAns.evaluationContext && revAns.evaluationContext.expectedAnswer) ||
+        "";
+      const formattedRevRef = resolveCorrectAnswerDisplay(rawRevRef, revAns.choices) || rawRevRef || "Walang nakatalagang tamang sagot";
+
       const itemCard = document.createElement("div");
       itemCard.className = `result-item-card reverse-review-item ${revAns.isCorrect ? "result-item-correct" : "result-item-incorrect"}`;
 
@@ -3178,7 +3846,7 @@ document.addEventListener("DOMContentLoaded", () => {
             <strong>👤 Iyong Sagot sa Reverse:</strong> ${escapeHtml(revAns.userAnswer)}
           </div>
           <div class="correct-ans-line">
-            <strong>✓ Tamang Sagot:</strong> ${escapeHtml(revAns.correctAnswer)}
+            <strong>✓ Tamang Sagot:</strong> ${escapeHtml(formattedRevRef)}
           </div>
         </div>
 
@@ -3239,7 +3907,12 @@ document.addEventListener("DOMContentLoaded", () => {
       mapCatalogQuestionToQuiz,
       hydrateDeckFromCatalog,
       renderDynamicTopicCards,
-      loadRemoteCatalog
+      loadRemoteCatalog,
+      resolveActiveStudentName,
+      handleTopicSelection,
+      startDeckSession,
+      showDeckWarning,
+      hideDeckWarning
     };
   }
 });

@@ -190,13 +190,18 @@
             <div class="stat-card-desc">Pamantayan sa Gemini AI (Parating sa Phase 6.5)</div>
           </div>
 
-          <div class="stat-card">
+          <div id="stat-card-api-security" class="stat-card hidden" data-admin-only="true" aria-hidden="true">
             <div class="stat-card-header">
               <span class="stat-card-label">Seguridad ng API</span>
               <span class="stat-card-badge live">Enforced</span>
             </div>
-            <div class="stat-card-value" style="font-size: 1.45rem; color: #047857;">RBAC Protected</div>
-            <div class="stat-card-desc">Verified JWT Bearer + Supabase RLS</div>
+            <div id="stat-api-security-value" class="stat-card-value" style="font-size: 1.45rem; color: #047857;">RBAC Protected</div>
+            <div id="stat-api-security-desc" class="stat-card-desc">Verified JWT Bearer + Supabase RLS</div>
+            <div style="margin-top: 0.75rem;">
+              <button type="button" id="btn-open-api-modal" class="btn-outline" data-admin-only="true" style="font-size: 0.78rem; padding: 0.35rem 0.75rem; width: 100%;">
+                &#9881; API Settings at Konpigurasyon
+              </button>
+            </div>
           </div>
         </div>
 
@@ -226,27 +231,27 @@
             </div>
           </div>
 
-          <div class="content-panel">
+          <div id="panel-system-status" class="content-panel hidden" data-admin-only="true" aria-hidden="true">
             <div class="panel-header">
               <h2>Katayuan ng Sistema</h2>
-              <span style="font-size: 0.8rem; color: #047857; font-weight: 700;">Operational</span>
+              <span id="system-status-summary-badge" style="font-size: 0.8rem; color: #047857; font-weight: 700;">Operational</span>
             </div>
-            <ul class="system-status-list">
+            <ul id="system-status-list" class="system-status-list">
               <li class="system-status-item">
                 <span>Express API Server</span>
-                <span class="status-indicator-badge ok"><span class="badge-dot"></span> Online</span>
+                <span id="status-badge-api-server" class="status-indicator-badge ok"><span class="badge-dot"></span> Online</span>
               </li>
               <li class="system-status-item">
                 <span>Supabase Database</span>
-                <span class="status-indicator-badge ok"><span class="badge-dot"></span> Connected</span>
+                <span id="status-badge-database" class="status-indicator-badge ok"><span class="badge-dot"></span> Connected</span>
               </li>
               <li class="system-status-item">
                 <span>RLS Security Gate</span>
-                <span class="status-indicator-badge ok"><span class="badge-dot"></span> Active</span>
+                <span id="status-badge-rls" class="status-indicator-badge ok"><span class="badge-dot"></span> Not verified</span>
               </li>
               <li class="system-status-item">
-                <span>Gemini Semantic Eval</span>
-                <span class="status-indicator-badge ok"><span class="badge-dot"></span> Standby</span>
+                <span>Deterministic Rubric Eval</span>
+                <span id="status-badge-evaluator" class="status-indicator-badge ok"><span class="badge-dot"></span> Operational</span>
               </li>
             </ul>
           </div>
@@ -679,18 +684,6 @@
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div class="form-group">
-              <label for="create-q-type">Uri ng Tanong (Question Type) *</label>
-              <select id="create-q-type" class="form-control" required>
-                <option value="multiple_choice">Maramihang Pagpipilian (Multiple Choice)</option>
-                <option value="identification">Pagtukoy (Identification)</option>
-                <option value="true_false">Tama o Mali (True or False)</option>
-                <option value="fill_in_blank">Punan ang Patlang (Fill in the Blank)</option>
-                <option value="situational">Sitwasyonal (Situational)</option>
-                <option value="open_ended">Malayang Sagot (Open-Ended)</option>
-              </select>
-            </div>
-
-            <div class="form-group">
               <label for="create-q-category">Kategorya ng Card (Card Category)</label>
               <select id="create-q-category" class="form-control">
                 <option value="">Pagsusulit / Quiz (Walang Card Type)</option>
@@ -703,7 +696,21 @@
                 <option value="challenge">Hamon (Challenge Card)</option>
               </select>
             </div>
+
+            <div class="form-group">
+              <label for="create-q-type">Uri ng Tanong (Question Type) *</label>
+              <select id="create-q-type" class="form-control" required>
+                <option value="multiple_choice">Maramihang Pagpipilian (Multiple Choice)</option>
+                <option value="identification">Pagtukoy (Identification)</option>
+                <option value="true_false">Tama o Mali (True or False)</option>
+                <option value="fill_in_blank">Punan ang Patlang (Fill in the Blank)</option>
+                <option value="situational">Sitwasyonal (Situational)</option>
+                <option value="open_ended">Malayang Sagot (Open-Ended)</option>
+              </select>
+            </div>
           </div>
+
+          <div id="create-q-category-banner" class="category-guidance-banner hidden"></div>
 
           <div class="form-group">
             <label for="create-q-prompt">Katanungan o Pahayag (Prompt) *</label>
@@ -711,20 +718,29 @@
             <div id="create-q-prompt-error" class="input-error-text">Kinakailangan ang teksto ng tanong.</div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div class="form-group">
               <label for="create-q-title">Pamagat (Title / Konsepto)</label>
               <input type="text" id="create-q-title" class="form-control" placeholder="Maikling label (opsyonal)" maxlength="250">
             </div>
 
             <div class="form-group">
+              <label for="create-q-tag">Tag / Konsepto (Subtopic)</label>
+              <input type="text" id="create-q-tag" class="form-control" placeholder="hal. Tunggalian, Tagpuan, Tema" maxlength="120">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
               <label for="create-q-points">Puntos (Points) *</label>
               <input type="number" id="create-q-points" class="form-control" min="0" max="100" value="1" required>
+              <div id="create-q-points-note" class="input-helper-text"></div>
             </div>
 
             <div class="form-group">
               <label for="create-q-timelimit">Palugit (Segundo)</label>
               <input type="number" id="create-q-timelimit" class="form-control" min="1" max="3600" placeholder="30">
+              <div id="create-q-timelimit-error" class="input-error-text">Kinakailangan ang palugit na oras para sa Hamon Card (1-3600 segundo).</div>
             </div>
           </div>
 
@@ -749,6 +765,26 @@
             <input type="text" id="create-q-expected-answer" class="form-control" placeholder="Tamang sagot o batayang tugon..." maxlength="4000">
             <div class="input-helper-text">Ginagamit sa pagsusuri ng sagot para sa identification o open-ended.</div>
             <div id="create-q-expected-error" class="input-error-text">Kinakailangan ang inaasahang sagot.</div>
+
+            <div class="form-group" style="margin-top: 0.75rem;">
+              <label for="create-q-accepted-answers">Mga Katanggap-tanggap na Alternatibong Sagot (Accepted Alternatives)</label>
+              <input type="text" id="create-q-accepted-answers" class="form-control" placeholder="Ihiwalay gamit ang kuwit (hal. tagpuan, pook, lokasyon)" maxlength="2000">
+              <div class="input-helper-text">Iba pang eksaktong salita o parirala na tatanggapin bilang buong tamang sagot.</div>
+            </div>
+
+            <!-- Rubric Concept Groups Container -->
+            <div class="rubric-groups-container" style="margin-top: 0.75rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <label style="margin: 0; font-weight: 600;">Mga Pangkat ng Konsepto / Rubric Groups (Semantiko)</label>
+                <button type="button" id="btn-add-rubric-create" class="btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">
+                  + Magdagdag ng Pangkat ng Konsepto
+                </button>
+              </div>
+              <div class="input-helper-text" style="margin-bottom: 0.5rem;">Bawat pangkat ay naglalaman ng magkasingkahulugang salita (hal. <code>lugar, pook, tagpuan</code>). Dapat magtugma ang sagot ng mag-aaral sa bawat pangkat para sa ganap na marka.</div>
+              <div id="create-q-rubric-groups-list" class="rubric-groups-list">
+                <!-- Dynamically populated rubric group rows -->
+              </div>
+            </div>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
@@ -758,8 +794,9 @@
             </div>
 
             <div class="form-group">
-              <label for="create-q-hint">Pahiwatig (Hint / Tulong)</label>
+              <label for="create-q-hint" id="create-q-hint-label">Pahiwatig (Hint / Tulong)</label>
               <textarea id="create-q-hint" class="form-control" rows="2" placeholder="Pahiwatig kapag nag-reveal ang mag-aaral..." maxlength="1000"></textarea>
+              <div id="create-q-hint-error" class="input-error-text">Kinakailangan ang pahiwatig (hint) para sa Gabay Card.</div>
             </div>
           </div>
         </div>
@@ -794,9 +831,39 @@
 
           <div style="display: flex; gap: 0.75rem; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap;">
             <span id="edit-q-code-badge" class="topic-code-badge">--</span>
-            <span id="edit-q-type-badge" class="badge-type">--</span>
-            <span id="edit-q-category-badge" class="badge-category quiz">--</span>
+            <span id="edit-q-type-badge" class="badge-type hidden">--</span>
+            <span id="edit-q-category-badge" class="badge-category quiz hidden">--</span>
           </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
+              <label for="edit-q-category">Kategorya ng Card (Card Category)</label>
+              <select id="edit-q-category" class="form-control">
+                <option value="">Pagsusulit / Quiz (Walang Card Type)</option>
+                <option value="question">Tanong (Question Card)</option>
+                <option value="statement">Pahayag (Statement Card)</option>
+                <option value="correction">Pagwawasto (Correction Card)</option>
+                <option value="bonus">Bonus Card</option>
+                <option value="reverse">Reverse Card</option>
+                <option value="help">Tulong (Help Card)</option>
+                <option value="challenge">Hamon (Challenge Card)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="edit-q-type">Uri ng Tanong (Question Type) *</label>
+              <select id="edit-q-type" class="form-control" required>
+                <option value="multiple_choice">Maramihang Pagpipilian (Multiple Choice)</option>
+                <option value="identification">Pagtukoy (Identification)</option>
+                <option value="true_false">Tama o Mali (True or False)</option>
+                <option value="fill_in_blank">Punan ang Patlang (Fill in the Blank)</option>
+                <option value="situational">Sitwasyonal (Situational)</option>
+                <option value="open_ended">Malayang Sagot (Open-Ended)</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="edit-q-category-banner" class="category-guidance-banner hidden"></div>
 
           <div class="form-group">
             <label for="edit-q-prompt">Katanungan o Pahayag (Prompt) *</label>
@@ -804,20 +871,29 @@
             <div id="edit-q-prompt-error" class="input-error-text">Kinakailangan ang teksto ng tanong.</div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 1rem;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
             <div class="form-group">
               <label for="edit-q-title">Pamagat (Title / Konsepto)</label>
               <input type="text" id="edit-q-title" class="form-control" maxlength="250">
             </div>
 
             <div class="form-group">
+              <label for="edit-q-tag">Tag / Konsepto (Subtopic)</label>
+              <input type="text" id="edit-q-tag" class="form-control" placeholder="hal. Tunggalian, Tagpuan, Tema" maxlength="120">
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+            <div class="form-group">
               <label for="edit-q-points">Puntos (Points) *</label>
               <input type="number" id="edit-q-points" class="form-control" min="0" max="100" required>
+              <div id="edit-q-points-note" class="input-helper-text"></div>
             </div>
 
             <div class="form-group">
               <label for="edit-q-timelimit">Palugit (Segundo)</label>
               <input type="number" id="edit-q-timelimit" class="form-control" min="1" max="3600">
+              <div id="edit-q-timelimit-error" class="input-error-text">Kinakailangan ang palugit na oras para sa Hamon Card (1-3600 segundo).</div>
             </div>
           </div>
 
@@ -840,6 +916,26 @@
             <label for="edit-q-expected-answer">Inaasahang Sagot / Answer Key *</label>
             <input type="text" id="edit-q-expected-answer" class="form-control" maxlength="4000">
             <div id="edit-q-expected-error" class="input-error-text">Kinakailangan ang inaasahang sagot.</div>
+
+            <div class="form-group" style="margin-top: 0.75rem;">
+              <label for="edit-q-accepted-answers">Mga Katanggap-tanggap na Alternatibong Sagot (Accepted Alternatives)</label>
+              <input type="text" id="edit-q-accepted-answers" class="form-control" placeholder="Ihiwalay gamit ang kuwit (hal. tagpuan, pook, lokasyon)" maxlength="2000">
+              <div class="input-helper-text">Iba pang eksaktong salita o parirala na tatanggapin bilang buong tamang sagot.</div>
+            </div>
+
+            <!-- Rubric Concept Groups Container -->
+            <div class="rubric-groups-container" style="margin-top: 0.75rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                <label style="margin: 0; font-weight: 600;">Mga Pangkat ng Konsepto / Rubric Groups (Semantiko)</label>
+                <button type="button" id="btn-add-rubric-edit" class="btn-outline" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">
+                  + Magdagdag ng Pangkat ng Konsepto
+                </button>
+              </div>
+              <div class="input-helper-text" style="margin-bottom: 0.5rem;">Bawat pangkat ay naglalaman ng magkasingkahulugang salita (hal. <code>lugar, pook, tagpuan</code>). Dapat magtugma ang sagot ng mag-aaral sa bawat pangkat para sa ganap na marka.</div>
+              <div id="edit-q-rubric-groups-list" class="rubric-groups-list">
+                <!-- Dynamically populated rubric group rows -->
+              </div>
+            </div>
           </div>
 
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
@@ -849,8 +945,9 @@
             </div>
 
             <div class="form-group">
-              <label for="edit-q-hint">Pahiwatig (Hint / Tulong)</label>
+              <label for="edit-q-hint" id="edit-q-hint-label">Pahiwatig (Hint / Tulong)</label>
               <textarea id="edit-q-hint" class="form-control" rows="2" maxlength="1000"></textarea>
+              <div id="edit-q-hint-error" class="input-error-text">Kinakailangan ang pahiwatig (hint) para sa Gabay Card.</div>
             </div>
           </div>
         </div>
@@ -983,6 +1080,45 @@
         <button type="button" class="btn-outline" data-close-modal="confirm">Kanselahin</button>
         <button type="button" id="btn-execute-confirm" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem;">
           Ituloy
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 8: Admin-Only API Settings & Configuration Modal -->
+  <div id="modal-api-settings" class="modal-overlay hidden" data-admin-only="true" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="modal-api-settings-title">
+    <div class="modal-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <h3 id="modal-api-settings-title">Seguridad at Konpigurasyon ng API (Admin)</h3>
+        <button type="button" class="modal-close-btn" data-close-modal="api-settings" aria-label="Isara">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: var(--dash-radius-md); padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.82rem; color: #065f46; line-height: 1.45;">
+          <strong>Administrator Access Only:</strong> Ang impormasyong ito sa konpigurasyon ng API at katayuan ng sistema ay limitado lamang sa mga na-verify na Administrator.
+        </div>
+
+        <div class="account-details-grid">
+          <div class="account-detail-row">
+            <div class="account-detail-label">API Base Endpoint</div>
+            <div id="api-modal-base-path" class="account-detail-val" style="font-family: monospace;">/api/v1</div>
+          </div>
+          <div class="account-detail-row">
+            <div class="account-detail-label">Access Control</div>
+            <div id="api-modal-rbac-status" class="account-detail-val">RBAC Protected (Verified JWT Bearer + Supabase RLS)</div>
+          </div>
+          <div class="account-detail-row">
+            <div class="account-detail-label">Evaluation Service</div>
+            <div id="api-modal-evaluator-provider" class="account-detail-val">PanitiKard Deterministic Rubric Evaluator</div>
+          </div>
+          <div class="account-detail-row">
+            <div class="account-detail-label">Guest Gameplay Sessions</div>
+            <div id="api-modal-guest-sessions" class="account-detail-val">Enabled (HMAC-Signed Session Tokens)</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-primary" style="width: auto; padding: 0.5rem 1.25rem;" data-close-modal="api-settings">
+          Isara
         </button>
       </div>
     </div>

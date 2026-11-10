@@ -1,4 +1,4 @@
-﻿const { getSupabase } = require('./supabase');
+const { getSupabase } = require('./supabase');
 const { HttpError } = require('../middleware/httpError');
 
 function throwDbError(error, operation) {
@@ -20,15 +20,87 @@ function publicPayload(payload) {
   return scrub(payload || {});
 }
 
+const CANONICAL_CATEGORY_SORT_ORDER = {
+  question: 1,
+  statement: 2,
+  correction: 3,
+  bonus: 4,
+  reverse: 5,
+  help: 6,
+  challenge: 7
+};
+
+function getCategorySortOrder(catObj, fallbackCode = null, hasCategory = false) {
+  if (catObj && typeof catObj.sort_order === 'number') {
+    return catObj.sort_order;
+  }
+  const code = (catObj && catObj.code) || fallbackCode || null;
+  if (code && Object.prototype.hasOwnProperty.call(CANONICAL_CATEGORY_SORT_ORDER, code)) {
+    return CANONICAL_CATEGORY_SORT_ORDER[code];
+  }
+  return (code || hasCategory) ? 99 : 999;
+}
+
+function compareNaturalCode(a, b) {
+  return String(a || '').localeCompare(String(b || ''), undefined, { numeric: true, sensitivity: 'base' });
+}
+
 function createCatalogService({ publicClientFactory = getSupabase } = {}) {
   return {
-    async listTopics(client = publicClientFactory()) {
+    async listTopics(client = publicClientFactory(), options = {}) {
       if (!client) return null;
       const { data, error } = await client.from('topics')
         .select('id, code, title, description, competency, status')
         .eq('status', 'published').is('archived_at', null).order('title');
       throwDbError(error, 'List topics');
-      return data || [];
+      const topics = data || [];
+      if (!topics.length) return [];
+
+      const topicIds = topics.map(t => t.id).filter(Boolean);
+      let publishedQuestions = [];
+      if (topicIds.length && typeof client.from === 'function') {
+        try {
+          const qQuery = client.from('questions')
+            .select('id, topic_id, card_category_id, status, archived_at')
+            .in('topic_id', topicIds)
+            .eq('status', 'published')
+            .is('archived_at', null);
+          const { data: qData, error: qError } = await qQuery;
+          if (!qError && Array.isArray(qData)) {
+            publishedQuestions = qData;
+          }
+        } catch (_err) {
+          // Graceful fallback if mock client does not implement questions lookup
+        }
+      }
+
+      const enriched = topics.map(topic => {
+        const topicQs = publishedQuestions.filter(q => q.topic_id === topic.id);
+        const deckQuestionCount = topicQs.filter(q => Boolean(q.card_category_id)).length;
+        const quizQuestionCount = topicQs.filter(q => !q.card_category_id).length;
+        const publishedQuestionCount = topicQs.length;
+        const supportedModes = [];
+        if (deckQuestionCount > 0) supportedModes.push('deck');
+        if (quizQuestionCount > 0) supportedModes.push('quiz');
+        return {
+          ...topic,
+          publishedQuestionCount,
+          deckQuestionCount,
+          quizQuestionCount,
+          playable: publishedQuestionCount > 0,
+          supportedModes
+        };
+      });
+
+      const mode = typeof options?.mode === 'string' ? options.mode.toLowerCase() : '';
+      const playableOnly = options?.playableOnly === true || Boolean(mode);
+      if (!playableOnly) return enriched;
+
+      return enriched.filter(topic => {
+        if (mode === 'deck' || mode === 'cards') return topic.deckQuestionCount > 0;
+        if (mode === 'quiz') return topic.quizQuestionCount > 0;
+        return topic.publishedQuestionCount > 0;
+      });
     },
 
     async listQuestions(topicCode, client = publicClientFactory(), { includeDrafts = false, kind = 'all' } = {}) {
@@ -41,7 +113,7 @@ function createCatalogService({ publicClientFactory = getSupabase } = {}) {
       }
 
       let query = client.from('questions')
-        .select('id, code, topic_id, card_category_id, question_type, status, current_version, archived_at, card_categories(code, label)')
+        .select('id, code, topic_id, card_category_id, question_type, status, current_version, archived_at, card_categories(code, label, sort_order)')
         .eq('topic_id', topic.id).is('archived_at', null).order('code');
       if (!includeDrafts) query = query.eq('status', 'published');
       const { data: questions, error: questionsError } = await query;
@@ -56,12 +128,25 @@ function createCatalogService({ publicClientFactory = getSupabase } = {}) {
 
       const questionIds = selected.map(question => question.id);
       const { data: versions, error: versionsError } = await client.from('question_versions')
-        .select('id, question_id, version_number, question_type, card_category_id, card_categories(code, label), title, prompt, explanation, hint, points, time_limit_seconds, difficulty, category_label, tag, payload, created_at')
+        .select('id, question_id, version_number, question_type, card_category_id, card_categories(code, label, sort_order), title, prompt, explanation, hint, points, time_limit_seconds, difficulty, category_label, tag, payload, created_at')
         .in('question_id', questionIds);
       throwDbError(versionsError, 'Load question versions');
       const currentVersions = (versions || []).filter(version => {
         const question = selected.find(item => item.id === version.question_id);
         return question && version.version_number === question.current_version;
+      });
+
+      selected.sort((a, b) => {
+        const verA = currentVersions.find(item => item.question_id === a.id);
+        const verB = currentVersions.find(item => item.question_id === b.id);
+        const catA = verA?.card_categories || a.card_categories || null;
+        const catB = verB?.card_categories || b.card_categories || null;
+        const hasCatA = Boolean(verA?.card_category_id || a.card_category_id || catA?.code);
+        const hasCatB = Boolean(verB?.card_category_id || b.card_category_id || catB?.code);
+        const orderA = getCategorySortOrder(catA, catA?.code, hasCatA);
+        const orderB = getCategorySortOrder(catB, catB?.code, hasCatB);
+        if (orderA !== orderB) return orderA - orderB;
+        return compareNaturalCode(a.code, b.code);
       });
 
       const versionIds = currentVersions.map(version => version.id);

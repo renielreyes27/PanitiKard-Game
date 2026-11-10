@@ -161,3 +161,25 @@ test('Question Workflow: published question without draft revision is clean', ()
   assert.equal(publishedClean.status, 'published');
   assert.equal(publishedClean.hasDraftRevision, false);
 });
+
+test('Question Workflow: promptPublishQuestion blocks and warns when parent topic is unpublished', () => {
+  dashboard.setTopicsList([
+    { code: 'draft-topic', title: 'Paksang Borador', status: 'draft' },
+    { code: 'pub-topic', title: 'Paksang Nailathala', status: 'published' }
+  ]);
+  dashboard.setQuestionsList([
+    { code: 'draft-topic-q-01', topicCode: 'draft-topic', status: 'draft', currentVersion: 1 },
+    { code: 'pub-topic-q-01', topicCode: 'pub-topic', status: 'draft', currentVersion: 1 }
+  ]);
+
+  try {
+    const blocked = dashboard.promptPublishQuestion('draft-topic-q-01', 1);
+    assert.equal(blocked, false, 'Publishing a question under a draft topic must be blocked on the frontend with a warning');
+
+    const allowed = dashboard.promptPublishQuestion('pub-topic-q-01', 1);
+    assert.equal(allowed, true, 'Publishing a question under a published topic must proceed');
+  } finally {
+    dashboard.setTopicsList([]);
+    dashboard.setQuestionsList([]);
+  }
+});

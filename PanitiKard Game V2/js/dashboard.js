@@ -14,6 +14,8 @@
   // Internal State
   // ---------------------------------------------------------------------------
   let _currentView = 'overview';
+  let _currentProfile = null;
+  let _profileCleared = false;
   const VALID_VIEWS = new Set(['overview', 'topics', 'questions', 'rubrics', 'account']);
 
   // Topic Management State
@@ -169,10 +171,165 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Role-Based Visibility & Admin-Only Feature Guards
+  // ---------------------------------------------------------------------------
+  function getVerifiedRole(profile) {
+    if (profile === null) return null;
+    if (profile && typeof profile === 'object') {
+      return profile.role || null;
+    }
+    if (_profileCleared) return null;
+    const resolved = _currentProfile || (typeof getAuth()?.getProfile === 'function' ? getAuth().getProfile() : null);
+    return resolved?.role || null;
+  }
+
+  function isAdminUser(profile) {
+    if (profile === null) return false;
+    return getVerifiedRole(profile) === 'admin';
+  }
+
+  function applyRoleBasedVisibility(profile) {
+    if (profile === null) {
+      _currentProfile = null;
+      _profileCleared = true;
+    } else if (profile !== undefined) {
+      _currentProfile = profile;
+      _profileCleared = false;
+    }
+    const isAdmin = profile === null ? false : isAdminUser(profile);
+
+    if (typeof document === 'undefined') return isAdmin;
+
+    const adminElements = [
+      document.getElementById('stat-card-api-security'),
+      document.getElementById('btn-open-api-modal'),
+      document.getElementById('panel-system-status')
+    ];
+
+    if (typeof document.querySelectorAll === 'function') {
+      document.querySelectorAll('[data-admin-only="true"]').forEach(el => {
+        if (el.id !== 'modal-api-settings' && !adminElements.includes(el)) {
+          adminElements.push(el);
+        }
+      });
+    }
+
+    adminElements.forEach(el => {
+      if (!el) return;
+      if (isAdmin) {
+        el.classList.remove('hidden');
+        el.removeAttribute('aria-hidden');
+      } else {
+        el.classList.add('hidden');
+        el.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    const apiModal = document.getElementById('modal-api-settings');
+    if (apiModal && !isAdmin) {
+      apiModal.classList.remove('active');
+      apiModal.classList.add('hidden');
+      apiModal.setAttribute('aria-hidden', 'true');
+    }
+
+    return isAdmin;
+  }
+
+  async function loadSystemStatus(profile) {
+    if (!isAdminUser(profile)) {
+      applyRoleBasedVisibility(profile);
+      return null;
+    }
+
+    const api = getApi();
+    if (!api || typeof api.getSystemStatus !== 'function') return null;
+
+    try {
+      const status = await api.getSystemStatus();
+      if (typeof document !== 'undefined' && status) {
+        const apiServerBadge = document.getElementById('status-badge-api-server');
+        const dbBadge = document.getElementById('status-badge-database');
+        const rlsBadge = document.getElementById('status-badge-rls');
+        const evalBadge = document.getElementById('status-badge-evaluator');
+        const summaryBadge = document.getElementById('system-status-summary-badge');
+
+        if (apiServerBadge && status.apiServer) {
+          apiServerBadge.innerHTML = `<span class="badge-dot"></span> ${escapeHtml(status.apiServer.label || 'Online')}`;
+        }
+        if (dbBadge && status.database) {
+          dbBadge.innerHTML = `<span class="badge-dot"></span> ${escapeHtml(status.database.label || 'Disconnected')}`;
+        }
+        if (rlsBadge && status.rlsSecurity) {
+          rlsBadge.innerHTML = `<span class="badge-dot"></span> ${escapeHtml(status.rlsSecurity.label || 'Not verified')}`;
+        }
+        if (evalBadge && status.evaluator) {
+          evalBadge.innerHTML = `<span class="badge-dot"></span> ${escapeHtml(status.evaluator.label || 'Operational')}`;
+        }
+        if (summaryBadge && status.database) {
+          summaryBadge.textContent = status.database.status === 'connected' ? 'Operational' : 'Degraded';
+        }
+      }
+      return status;
+    } catch (err) {
+      console.warn('[Dashboard] Error loading admin system status:', err.message);
+      return null;
+    }
+  }
+
+  async function openApiSettingsModal() {
+    if (!isAdminUser()) {
+      showToast('Para sa Administrator lamang ang API settings at katayuan ng sistema.', 'error');
+      return false;
+    }
+
+    if (typeof document === 'undefined') return true;
+    const modal = document.getElementById('modal-api-settings');
+    if (!modal) return false;
+
+    modal.classList.remove('hidden');
+    modal.removeAttribute('aria-hidden');
+    modal.classList.add('active');
+
+    const api = getApi();
+    if (api && typeof api.getApiSettings === 'function') {
+      try {
+        const settings = await api.getApiSettings();
+        if (settings) {
+          const basePathEl = document.getElementById('api-modal-base-path');
+          const rbacEl = document.getElementById('api-modal-rbac-status');
+          if (basePathEl && settings.basePath) basePathEl.textContent = settings.basePath;
+          if (rbacEl && settings.rbacProtection) {
+            rbacEl.textContent = `${settings.rbacProtection} (${settings.authMechanism || 'Verified JWT Bearer + Supabase RLS'})`;
+          }
+        }
+      } catch (err) {
+        console.warn('[Dashboard] Error loading API settings:', err.message);
+      }
+    }
+
+    return true;
+  }
+
+  function closeApiSettingsModal() {
+    if (typeof document === 'undefined') return;
+    const modal = document.getElementById('modal-api-settings');
+    if (modal) {
+      modal.classList.remove('active');
+      if (!isAdminUser()) {
+        modal.classList.add('hidden');
+        modal.setAttribute('aria-hidden', 'true');
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // UI Rendering Helpers
   // ---------------------------------------------------------------------------
   function renderUserProfile(profile) {
     if (typeof document === 'undefined' || !profile) return;
+
+    _currentProfile = profile;
+    applyRoleBasedVisibility(profile);
 
     const roleName = profile.role === 'admin' ? 'Administrator' : 'Guro';
     const roleClass = profile.role === 'admin' ? 'admin' : 'teacher';
@@ -242,6 +399,9 @@
   }
 
   function showAuthScreen(errorMessage = '') {
+    _currentProfile = null;
+    applyRoleBasedVisibility(null);
+
     if (typeof document === 'undefined') return;
     const loadingView = document.getElementById('loading-view');
     const appWrapper = document.getElementById('dashboard-app');
@@ -302,6 +462,9 @@
     switchView(hash);
 
     loadOverviewStats();
+    if (isAdminUser(profile)) {
+      loadSystemStatus(profile);
+    }
   }
 
   function formatDate(isoDateString) {
@@ -845,6 +1008,410 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Card Category Rules & Dynamic Behaviors
+  // ---------------------------------------------------------------------------
+  const CATEGORY_RULES = {
+    question: {
+      label: 'Tanong (Question Card)',
+      allowedTypes: ['multiple_choice'],
+      defaultType: 'multiple_choice',
+      defaultPoints: 1,
+      isTimed: false,
+      requireHint: false,
+      promptPlaceholder: 'Ilagay ang teksto ng katanungan...',
+      bannerText: 'Tanong Card: Maramihang Pagpipilian (Multiple Choice) lamang. Pamantayang 1 punto sa tamang sagot.',
+      themeClass: 'cat-question'
+    },
+    statement: {
+      label: 'Pahayag (Statement Card)',
+      allowedTypes: ['identification', 'open_ended', 'true_false', 'fill_in_blank', 'situational'],
+      defaultType: 'identification',
+      defaultPoints: 1,
+      isTimed: false,
+      requireHint: false,
+      promptPlaceholder: 'Ilagay ang pahayag o sitwasyon...',
+      bannerText: 'Pahayag Card: Isinusulat na sagot (Written / Identification). Sinusuri gamit ang inaasahang sagot at mga katumbas.',
+      themeClass: 'cat-statement'
+    },
+    correction: {
+      label: 'Pagwawasto (Correction Card)',
+      allowedTypes: ['identification', 'open_ended', 'true_false', 'fill_in_blank', 'situational'],
+      defaultType: 'identification',
+      defaultPoints: 1,
+      isTimed: false,
+      requireHint: false,
+      promptPlaceholder: 'Iwasto ang pahayag: ...',
+      bannerText: 'Pagwawasto Card: Isinusulat na pagwawasto. Dapat may malinaw na batayang sagot at semantikong rubric.',
+      themeClass: 'cat-correction'
+    },
+    bonus: {
+      label: 'Bonus Card',
+      allowedTypes: ['multiple_choice', 'identification', 'open_ended', 'true_false', 'fill_in_blank', 'situational'],
+      defaultType: 'multiple_choice',
+      defaultPoints: 2,
+      isTimed: false,
+      requireHint: false,
+      promptPlaceholder: 'Ilagay ang bonus na tanong...',
+      bannerText: 'Bonus Card: Nagbibigay ng 2 puntos bilang gantimpala. Maaaring Maramihang Pagpipilian o Isinusulat na sagot.',
+      themeClass: 'cat-bonus',
+      pointsNote: 'Karaniwang 2 puntos ang iginagawad para sa Bonus Card.'
+    },
+    reverse: {
+      label: 'Baligtaran (Reverse Card)',
+      allowedTypes: ['multiple_choice', 'identification', 'open_ended', 'true_false', 'fill_in_blank', 'situational'],
+      defaultType: 'identification',
+      defaultPoints: 0,
+      isTimed: false,
+      requireHint: false,
+      promptPlaceholder: 'Ilagay ang tanong o kasanayang susuriin sa Baligtaran...',
+      bannerText: 'Baligtaran Card: 0 puntos sa karaniwang deck (review card). Sa Reverse Round, awtomatikong 1 punto ang igagawad ng server.',
+      themeClass: 'cat-reverse',
+      pointsNote: '0 puntos sa regular na laro (review card). May 1-point override ang server sa Reverse Round.'
+    },
+    help: {
+      label: 'Gabay (Help / Tulong Card)',
+      allowedTypes: ['multiple_choice', 'identification', 'open_ended', 'true_false', 'fill_in_blank', 'situational'],
+      defaultType: 'multiple_choice',
+      defaultPoints: 1,
+      isTimed: false,
+      requireHint: true,
+      promptPlaceholder: 'Ilagay ang gabay na katanungan...',
+      bannerText: 'Gabay Card: Kinakailangan ang pahiwatig (hint) upang matulungan ang mag-aaral.',
+      themeClass: 'cat-help'
+    },
+    challenge: {
+      label: 'Hamon (Timed Challenge Card)',
+      allowedTypes: ['multiple_choice', 'identification', 'open_ended', 'true_false', 'fill_in_blank', 'situational'],
+      defaultType: 'multiple_choice',
+      defaultPoints: 1,
+      isTimed: true,
+      defaultTimer: 30,
+      requireHint: false,
+      promptPlaceholder: 'Ilagay ang hamong katanungan...',
+      bannerText: 'Hamon Card: May palugit na oras (timer, default 30s). Kailangang masagot bago maubos ang countdown.',
+      themeClass: 'cat-challenge'
+    },
+    quiz: {
+      label: 'Pagsusulit / Quiz (Walang Card Type)',
+      allowedTypes: ['multiple_choice', 'identification', 'open_ended', 'true_false', 'fill_in_blank', 'situational'],
+      defaultType: 'multiple_choice',
+      defaultPoints: 1,
+      isTimed: false,
+      requireHint: false,
+      promptPlaceholder: 'Ilagay ang teksto ng katanungan...',
+      bannerText: 'Pagsusulit (Quiz): Karaniwang tanong na walang collectible card frame. Standard 1 punto.',
+      themeClass: 'cat-quiz'
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Rubrics & Accepted Answers Helpers
+  // ---------------------------------------------------------------------------
+  function parseAcceptedAnswers(value) {
+    if (!value) return [];
+    if (Array.isArray(value)) {
+      return value.map(v => (v || '').trim()).filter(Boolean);
+    }
+    if (typeof value !== 'string') return [];
+    return value
+      .split(/[,;\n]/)
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+
+  function formatAcceptedAnswers(answers) {
+    if (!Array.isArray(answers) || answers.length === 0) return '';
+    return answers.join(', ');
+  }
+
+  function renderRubricGroupsEditor(containerEl, groups = []) {
+    if (!containerEl) return;
+    containerEl.innerHTML = '';
+    const safeGroups = Array.isArray(groups) ? groups : [];
+    if (safeGroups.length) {
+      safeGroups.forEach(group => {
+        addRubricGroupRow(containerEl, group);
+      });
+    }
+  }
+
+  function addRubricGroupRow(containerEl, terms = []) {
+    if (!containerEl) return;
+    const row = document.createElement('div');
+    row.className = 'rubric-group-row';
+
+    const currentCount = containerEl.querySelectorAll('.rubric-group-row').length + 1;
+    const termsString = Array.isArray(terms) ? terms.join(', ') : (typeof terms === 'string' ? terms : '');
+
+    row.innerHTML = `
+      <span class="rubric-group-badge">Pangkat ${currentCount}</span>
+      <input type="text" class="form-control rubric-group-input" placeholder="Mga kasingkahulugan, ihiwalay sa kuwit (hal. tagpuan, pook)" value="${escapeHtml(termsString)}" maxlength="1000">
+      <button type="button" class="btn-remove-rubric" title="Alisin ang pangkat ng konsepto">&times;</button>
+    `;
+
+    row.querySelector('.btn-remove-rubric').addEventListener('click', () => {
+      row.remove();
+      renumberRubricGroups(containerEl);
+    });
+
+    containerEl.appendChild(row);
+  }
+
+  function renumberRubricGroups(containerEl) {
+    if (!containerEl) return;
+    const rows = containerEl.querySelectorAll('.rubric-group-row');
+    rows.forEach((row, i) => {
+      const badge = row.querySelector('.rubric-group-badge');
+      if (badge) badge.textContent = `Pangkat ${i + 1}`;
+    });
+  }
+
+  function getRubricGroupsFromEditor(containerEl) {
+    if (!containerEl) return [];
+    const rows = containerEl.querySelectorAll('.rubric-group-row');
+    const groups = [];
+
+    rows.forEach(row => {
+      const input = row.querySelector('.rubric-group-input');
+      const val = (input?.value || '').trim();
+      if (val) {
+        const terms = val.split(/[,;\n]/).map(t => t.trim()).filter(Boolean);
+        if (terms.length) {
+          groups.push(terms);
+        }
+      }
+    });
+
+    return groups;
+  }
+
+  function applyCategoryDefaults(prefix, categoryCode, options = {}) {
+    const catKey = categoryCode || 'quiz';
+    const rule = CATEGORY_RULES[catKey] || CATEGORY_RULES.quiz;
+
+    const bannerEl = document.getElementById(`${prefix}-q-category-banner`);
+    const promptInput = document.getElementById(`${prefix}-q-prompt`);
+    const pointsInput = document.getElementById(`${prefix}-q-points`);
+    const pointsNoteEl = document.getElementById(`${prefix}-q-points-note`);
+    const timeLimitInput = document.getElementById(`${prefix}-q-timelimit`);
+    const hintLabel = document.getElementById(`${prefix}-q-hint-label`);
+    const typeSelect = document.getElementById(`${prefix}-q-type`);
+
+    // 1. Guidance Banner
+    if (bannerEl) {
+      bannerEl.className = `category-guidance-banner ${rule.themeClass}`;
+      bannerEl.textContent = rule.bannerText;
+      bannerEl.classList.remove('hidden');
+    }
+
+    // 2. Prompt Placeholder
+    if (promptInput) {
+      if (catKey === 'correction') {
+        promptInput.placeholder = 'Iwasto ang pahayag: ...';
+      } else {
+        promptInput.placeholder = rule.promptPlaceholder;
+      }
+    }
+
+    // 3. Question Type options filtering & auto-switch
+    if (typeSelect) {
+      const currentType = typeSelect.value;
+      Array.from(typeSelect.options).forEach(opt => {
+        const isAllowed = rule.allowedTypes.includes(opt.value);
+        opt.disabled = !isAllowed;
+        if (!isAllowed) {
+          opt.style.display = 'none';
+        } else {
+          opt.style.display = '';
+        }
+      });
+
+      if (!rule.allowedTypes.includes(currentType)) {
+        typeSelect.value = rule.defaultType;
+      }
+      updateQuestionTypeFormViews(prefix);
+    }
+
+    // 4. Points default and note
+    if (pointsInput && !options.preserveValues) {
+      pointsInput.value = rule.defaultPoints;
+    }
+    if (pointsNoteEl) {
+      pointsNoteEl.textContent = rule.pointsNote || '';
+      pointsNoteEl.style.display = rule.pointsNote ? 'block' : 'none';
+    }
+
+    // 5. Timer defaults & hints
+    if (timeLimitInput) {
+      if (rule.isTimed) {
+        timeLimitInput.required = true;
+        if (!options.preserveValues) {
+          timeLimitInput.value = rule.defaultTimer || 30;
+        }
+        timeLimitInput.placeholder = '30';
+      } else {
+        timeLimitInput.required = false;
+        if (!options.preserveValues) {
+          timeLimitInput.value = '';
+        }
+        timeLimitInput.placeholder = 'Walang timer';
+      }
+    }
+
+    // 6. Hint requirement indicator
+    if (hintLabel) {
+      hintLabel.textContent = rule.requireHint
+        ? 'Pahiwatig (Hint / Tulong) *'
+        : 'Pahiwatig (Hint / Tulong)';
+    }
+  }
+
+  function validateQuestionForm(prefix, isEdit = false) {
+    const topicSelect = document.getElementById(`${prefix}-q-topic`);
+    const codeInput = document.getElementById(`${prefix}-q-code`);
+    const catSelect = document.getElementById(`${prefix}-q-category`);
+    const typeSelect = document.getElementById(`${prefix}-q-type`);
+    const promptInput = document.getElementById(`${prefix}-q-prompt`);
+    const titleInput = document.getElementById(`${prefix}-q-title`);
+    const tagInput = document.getElementById(`${prefix}-q-tag`);
+    const pointsInput = document.getElementById(`${prefix}-q-points`);
+    const timeLimitInput = document.getElementById(`${prefix}-q-timelimit`);
+    const expInput = document.getElementById(`${prefix}-q-explanation`);
+    const hintInput = document.getElementById(`${prefix}-q-hint`);
+    const expectedInput = document.getElementById(`${prefix}-q-expected-answer`);
+    const acceptedInput = document.getElementById(`${prefix}-q-accepted-answers`);
+    const choicesContainer = document.getElementById(`${prefix}-q-choices-list`);
+    const rubricContainer = document.getElementById(`${prefix}-q-rubric-groups-list`);
+
+    const topicErr = document.getElementById(`${prefix}-q-topic-error`);
+    const codeErr = document.getElementById(`${prefix}-q-code-error`);
+    const promptErr = document.getElementById(`${prefix}-q-prompt-error`);
+    const choiceErr = document.getElementById(`${prefix}-q-choice-error`);
+    const expectedErr = document.getElementById(`${prefix}-q-expected-error`);
+    const timeLimitErr = document.getElementById(`${prefix}-q-timelimit-error`);
+    const hintErr = document.getElementById(`${prefix}-q-hint-error`);
+
+    if (topicErr) topicErr.classList.remove('active');
+    if (codeErr) codeErr.classList.remove('active');
+    if (promptErr) promptErr.classList.remove('active');
+    if (choiceErr) choiceErr.classList.remove('active');
+    if (expectedErr) expectedErr.classList.remove('active');
+    if (timeLimitErr) timeLimitErr.classList.remove('active');
+    if (hintErr) hintErr.classList.remove('active');
+
+    const topicCode = (topicSelect?.value || '').trim();
+    const code = isEdit
+      ? ((codeInput?.value || _activeEditingQuestion?.code || '').trim())
+      : ((codeInput?.value || '').trim());
+    const cardCategory = (catSelect?.value || '') || null;
+    const catKey = cardCategory || 'quiz';
+    const rule = CATEGORY_RULES[catKey] || CATEGORY_RULES.quiz;
+    const questionType = (typeSelect?.value || rule.defaultType || 'multiple_choice').trim();
+    const prompt = (promptInput?.value || '').trim();
+    const title = (titleInput?.value || '').trim();
+    const tag = (tagInput?.value || '').trim() || null;
+    const pointsRaw = pointsInput?.value !== undefined && pointsInput?.value !== ''
+      ? parseInt(pointsInput.value, 10)
+      : rule.defaultPoints;
+    const points = Number.isInteger(pointsRaw) && pointsRaw >= 0 && pointsRaw <= 100
+      ? pointsRaw
+      : rule.defaultPoints;
+    const explanation = (expInput?.value || '').trim();
+    const hint = (hintInput?.value || '').trim() || null;
+
+    let hasError = false;
+
+    // Validate Topic (only required for create)
+    if (!isEdit && !topicCode) {
+      if (topicErr) topicErr.classList.add('active');
+      hasError = true;
+    }
+
+    // Validate Code
+    if (!code || !/^[a-z0-9][a-z0-9-]{0,119}$/.test(code)) {
+      if (codeErr) codeErr.classList.add('active');
+      hasError = true;
+    }
+
+    // Validate Prompt
+    if (!prompt) {
+      if (promptErr) promptErr.classList.add('active');
+      hasError = true;
+    }
+
+    // Validate Category-specific Hint requirement
+    if (rule.requireHint && !hint) {
+      if (hintErr) hintErr.classList.add('active');
+      hasError = true;
+    }
+
+    // Validate Category-specific Timer requirement
+    let timeLimitSeconds = null;
+    if (rule.isTimed) {
+      const parsedTimer = timeLimitInput?.value ? parseInt(timeLimitInput.value, 10) : null;
+      if (!parsedTimer || parsedTimer < 1 || parsedTimer > 3600) {
+        if (timeLimitErr) timeLimitErr.classList.add('active');
+        hasError = true;
+      } else {
+        timeLimitSeconds = parsedTimer;
+      }
+    } else {
+      timeLimitSeconds = null; // Untimed categories must submit null
+    }
+
+    let choices = [];
+    let answerKey = null;
+    let expectedAnswer = null;
+    let acceptedAnswers = [];
+    let rubricGroups = [];
+
+    if (questionType === 'multiple_choice') {
+      const extracted = getChoicesFromEditor(choicesContainer);
+      choices = extracted.choices;
+      answerKey = extracted.answerKey;
+      if (choices.length < 2 || !answerKey) {
+        if (choiceErr) choiceErr.classList.add('active');
+        hasError = true;
+      }
+    } else {
+      expectedAnswer = (expectedInput?.value || '').trim();
+      if (!expectedAnswer) {
+        if (expectedErr) expectedErr.classList.add('active');
+        hasError = true;
+      }
+      acceptedAnswers = parseAcceptedAnswers(acceptedInput?.value);
+      rubricGroups = getRubricGroupsFromEditor(rubricContainer);
+      if (expectedAnswer) {
+        answerKey = expectedAnswer.length <= 250 ? expectedAnswer : expectedAnswer.slice(0, 250);
+      }
+    }
+
+    if (hasError) {
+      return { isValid: false, payload: null, topicCode };
+    }
+
+    const payload = {
+      code,
+      questionType,
+      cardCategory,
+      title,
+      tag,
+      prompt,
+      points,
+      timeLimitSeconds,
+      explanation,
+      hint,
+      choices,
+      answerKey,
+      expectedAnswer,
+      acceptedAnswers,
+      rubricGroups
+    };
+
+    return { isValid: true, payload, topicCode };
+  }
+
+  // ---------------------------------------------------------------------------
   // Choices Editor Helpers (For Multiple Choice Questions)
   // ---------------------------------------------------------------------------
   function addChoiceRow(containerEl, defaultKey = '', defaultText = '', isCorrect = false) {
@@ -925,6 +1492,9 @@
     const form = document.getElementById('form-create-question');
     const alert = document.getElementById('create-question-alert');
     const choicesContainer = document.getElementById('create-q-choices-list');
+    const rubricContainer = document.getElementById('create-q-rubric-groups-list');
+    const acceptedInput = document.getElementById('create-q-accepted-answers');
+    const tagInput = document.getElementById('create-q-tag');
 
     if (form) form.reset();
     if (alert) alert.style.display = 'none';
@@ -935,10 +1505,18 @@
     // Populate choices by default
     initDefaultChoices(choicesContainer);
 
-    // Toggle choices vs written container based on default type (multiple_choice)
-    const typeSelect = document.getElementById('create-q-type');
-    if (typeSelect) typeSelect.value = 'multiple_choice';
-    updateQuestionTypeFormViews('create');
+    // Clear rubric & accepted answers & tag
+    if (rubricContainer) rubricContainer.innerHTML = '';
+    if (acceptedInput) acceptedInput.value = '';
+    if (tagInput) tagInput.value = '';
+
+    // Apply category defaults for initial state
+    const catSelect = document.getElementById('create-q-category');
+    const initialCategory = (_questionCategoryFilter && _questionCategoryFilter !== 'all' && _questionCategoryFilter !== 'quiz')
+      ? _questionCategoryFilter
+      : (catSelect?.value || '');
+    if (catSelect) catSelect.value = initialCategory;
+    applyCategoryDefaults('create', initialCategory);
 
     // Pre-select topic if filtered by one
     const topicSelect = document.getElementById('create-q-topic');
@@ -975,16 +1553,21 @@
       const codeBadge = document.getElementById('edit-q-code-badge');
       const typeBadge = document.getElementById('edit-q-type-badge');
       const catBadge = document.getElementById('edit-q-category-badge');
+      const catSelect = document.getElementById('edit-q-category');
+      const typeSelect = document.getElementById('edit-q-type');
       const nextVersionText = document.getElementById('edit-q-next-version-text');
 
       const promptInput = document.getElementById('edit-q-prompt');
       const titleInput = document.getElementById('edit-q-title');
+      const tagInput = document.getElementById('edit-q-tag');
       const pointsInput = document.getElementById('edit-q-points');
       const timeLimitInput = document.getElementById('edit-q-timelimit');
       const expInput = document.getElementById('edit-q-explanation');
       const hintInput = document.getElementById('edit-q-hint');
       const expectedInput = document.getElementById('edit-q-expected-answer');
+      const acceptedInput = document.getElementById('edit-q-accepted-answers');
       const choicesContainer = document.getElementById('edit-q-choices-list');
+      const rubricContainer = document.getElementById('edit-q-rubric-groups-list');
 
       if (alert) alert.style.display = 'none';
       document.querySelectorAll('#modal-edit-question .input-error-text').forEach(el => el.classList.remove('active'));
@@ -999,6 +1582,18 @@
         catBadge.className = `badge-category ${catKey}`;
       }
 
+      if (catSelect) {
+        catSelect.value = detail.cardCategory || '';
+      }
+
+      // Apply category rules preserving existing values
+      applyCategoryDefaults('edit', detail.cardCategory, { preserveValues: true });
+
+      if (typeSelect) {
+        typeSelect.value = detail.questionType || 'multiple_choice';
+      }
+      updateQuestionTypeFormViews('edit');
+
       if (nextVersionText) {
         const nextNum = (detail.latestVersionNumber || detail.currentVersion || 1) + 1;
         nextVersionText.textContent = `Bersyon ${nextNum}`;
@@ -1007,18 +1602,15 @@
       const version = detail.version || {};
       if (promptInput) promptInput.value = version.prompt || '';
       if (titleInput) titleInput.value = version.title || '';
-      if (pointsInput) pointsInput.value = version.points ?? 1;
+      if (tagInput) tagInput.value = version.tag || '';
+      if (pointsInput) pointsInput.value = version.points ?? (CATEGORY_RULES[catKey]?.defaultPoints ?? 1);
       if (timeLimitInput) timeLimitInput.value = version.timeLimitSeconds || '';
       if (expInput) expInput.value = version.explanation || '';
       if (hintInput) hintInput.value = version.hint || '';
 
       const isMultipleChoice = detail.questionType === 'multiple_choice';
-      const choicesSection = document.getElementById('edit-q-choices-section');
-      const expectedSection = document.getElementById('edit-q-expected-section');
 
       if (isMultipleChoice) {
-        if (choicesSection) choicesSection.classList.remove('hidden');
-        if (expectedSection) expectedSection.classList.add('hidden');
         if (choicesContainer) {
           choicesContainer.innerHTML = '';
           const existingChoices = Array.isArray(version.choices) ? version.choices : [];
@@ -1032,10 +1624,14 @@
           }
         }
       } else {
-        if (choicesSection) choicesSection.classList.add('hidden');
-        if (expectedSection) expectedSection.classList.remove('hidden');
         if (expectedInput) {
           expectedInput.value = detail.rubric?.expectedAnswer || detail.rubric?.answerKey || '';
+        }
+        if (acceptedInput) {
+          acceptedInput.value = formatAcceptedAnswers(detail.rubric?.acceptedAnswers || []);
+        }
+        if (rubricContainer) {
+          renderRubricGroupsEditor(rubricContainer, detail.rubric?.rubricGroups || []);
         }
       }
 
@@ -1175,6 +1771,18 @@
   }
 
   function promptPublishQuestion(questionCode, versionNumber) {
+    const question = _questions.find(q => q && q.code === questionCode);
+    const parentTopic = question && question.topicCode
+      ? _topics.find(t => t && t.code === question.topicCode)
+      : null;
+    if (parentTopic && (parentTopic.status !== 'published' || Boolean(parentTopic.archived_at))) {
+      showToast(
+        `Kailangan munang i-publish ang paksang "${parentTopic.title || parentTopic.code}" bago ma-publish ang tanong na "${questionCode}".`,
+        'error'
+      );
+      return false;
+    }
+
     const verLabel = versionNumber ? ` (Bersyon ${versionNumber})` : '';
     openConfirmModal({
       title: 'I-publish ang Tanong',
@@ -1192,6 +1800,7 @@
         }
       }
     });
+    return true;
   }
 
   function promptUnpublishQuestion(questionCode) {
@@ -1745,6 +2354,7 @@
         closeEditQuestionModal();
         closePreviewQuestionModal();
         closeRubricPreviewModal();
+        closeApiSettingsModal();
         closeConfirmModal();
       }
     });
@@ -1760,9 +2370,18 @@
         else if (modalType === 'edit-q') closeEditQuestionModal();
         else if (modalType === 'preview-q') closePreviewQuestionModal();
         else if (modalType === 'preview-rubric') closeRubricPreviewModal();
+        else if (modalType === 'api-settings') closeApiSettingsModal();
         else if (modalType === 'confirm') closeConfirmModal();
       });
     });
+
+    const btnOpenApiModal = document.getElementById('btn-open-api-modal');
+    if (btnOpenApiModal) {
+      btnOpenApiModal.addEventListener('click', (e) => {
+        e.preventDefault();
+        openApiSettingsModal();
+      });
+    }
 
     // -------------------------------------------------------------------------
     // Topic Toolbar & Form Events
@@ -1979,111 +2598,73 @@
       });
     }
 
+    // Category & Type changes in Create Modal
+    const createCatSelect = document.getElementById('create-q-category');
+    if (createCatSelect) {
+      createCatSelect.addEventListener('change', (e) => {
+        applyCategoryDefaults('create', e.target.value);
+      });
+    }
+    const createTypeSelect = document.getElementById('create-q-type');
+    if (createTypeSelect) {
+      createTypeSelect.addEventListener('change', () => {
+        updateQuestionTypeFormViews('create');
+      });
+    }
+
+    // Category & Type changes in Edit Modal
+    const editCatSelect = document.getElementById('edit-q-category');
+    if (editCatSelect) {
+      editCatSelect.addEventListener('change', (e) => {
+        applyCategoryDefaults('edit', e.target.value);
+      });
+    }
+    const editTypeSelect = document.getElementById('edit-q-type');
+    if (editTypeSelect) {
+      editTypeSelect.addEventListener('change', () => {
+        updateQuestionTypeFormViews('edit');
+      });
+    }
+
+    // Dynamic Rubric Groups Add Button Handlers
+    const btnAddRubricCreate = document.getElementById('btn-add-rubric-create');
+    if (btnAddRubricCreate) {
+      btnAddRubricCreate.addEventListener('click', () => {
+        const container = document.getElementById('create-q-rubric-groups-list');
+        addRubricGroupRow(container);
+      });
+    }
+    const btnAddRubricEdit = document.getElementById('btn-add-rubric-edit');
+    if (btnAddRubricEdit) {
+      btnAddRubricEdit.addEventListener('click', () => {
+        const container = document.getElementById('edit-q-rubric-groups-list');
+        addRubricGroupRow(container);
+      });
+    }
+
     // Submit Create Question Form
     const createQuestionForm = document.getElementById('form-create-question');
     if (createQuestionForm) {
       createQuestionForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const topicSelect = document.getElementById('create-q-topic');
-        const codeInput = document.getElementById('create-q-code');
-        const typeSelect = document.getElementById('create-q-type');
-        const catSelect = document.getElementById('create-q-category');
-        const promptInput = document.getElementById('create-q-prompt');
-        const titleInput = document.getElementById('create-q-title');
-        const pointsInput = document.getElementById('create-q-points');
-        const timeLimitInput = document.getElementById('create-q-timelimit');
-        const expInput = document.getElementById('create-q-explanation');
-        const hintInput = document.getElementById('create-q-hint');
-        const expectedInput = document.getElementById('create-q-expected-answer');
-        const choicesContainer = document.getElementById('create-q-choices-list');
-
         const alertEl = document.getElementById('create-question-alert');
-        const topicErr = document.getElementById('create-q-topic-error');
-        const codeErr = document.getElementById('create-q-code-error');
-        const promptErr = document.getElementById('create-q-prompt-error');
-        const choiceErr = document.getElementById('create-q-choice-error');
-        const expectedErr = document.getElementById('create-q-expected-error');
         const submitBtn = document.getElementById('btn-submit-create-question');
 
         if (alertEl) alertEl.style.display = 'none';
-        if (topicErr) topicErr.classList.remove('active');
-        if (codeErr) codeErr.classList.remove('active');
-        if (promptErr) promptErr.classList.remove('active');
-        if (choiceErr) choiceErr.classList.remove('active');
-        if (expectedErr) expectedErr.classList.remove('active');
 
-        const topicCode = (topicSelect?.value || '').trim();
-        const code = (codeInput?.value || '').trim();
-        const questionType = (typeSelect?.value || 'multiple_choice').trim();
-        const cardCategory = (catSelect?.value || '') || null;
-        const prompt = (promptInput?.value || '').trim();
-        const title = (titleInput?.value || '').trim();
-        const points = parseInt(pointsInput?.value, 10) || 1;
-        const timeLimit = timeLimitInput?.value ? parseInt(timeLimitInput.value, 10) : null;
-        const explanation = (expInput?.value || '').trim();
-        const hint = (hintInput?.value || '').trim() || null;
-
-        let hasError = false;
-        if (!topicCode) {
-          if (topicErr) topicErr.classList.add('active');
-          hasError = true;
-        }
-        if (!code || !/^[a-z0-9][a-z0-9-]{0,119}$/.test(code)) {
-          if (codeErr) codeErr.classList.add('active');
-          hasError = true;
-        }
-        if (!prompt) {
-          if (promptErr) promptErr.classList.add('active');
-          hasError = true;
-        }
-
-        let choices = [];
-        let answerKey = null;
-        let expectedAnswer = null;
-
-        if (questionType === 'multiple_choice') {
-          const extracted = getChoicesFromEditor(choicesContainer);
-          choices = extracted.choices;
-          answerKey = extracted.answerKey;
-          if (choices.length < 2 || !answerKey) {
-            if (choiceErr) choiceErr.classList.add('active');
-            hasError = true;
-          }
-        } else {
-          expectedAnswer = (expectedInput?.value || '').trim();
-          if (!expectedAnswer) {
-            if (expectedErr) expectedErr.classList.add('active');
-            hasError = true;
-          }
-        }
-
-        if (hasError) return;
+        const { isValid, payload, topicCode } = validateQuestionForm('create', false);
+        if (!isValid || !payload) return;
 
         if (submitBtn) {
           submitBtn.disabled = true;
           submitBtn.textContent = 'Lumilikha ng Tanong...';
         }
 
-        const questionPayload = {
-          code,
-          questionType,
-          cardCategory,
-          title,
-          prompt,
-          points,
-          timeLimitSeconds: timeLimit,
-          explanation,
-          hint,
-          choices,
-          answerKey,
-          expectedAnswer
-        };
-
         const api = getApi();
         try {
-          const created = await api.createQuestion(topicCode, questionPayload);
+          const created = await api.createQuestion(topicCode, payload);
           closeCreateQuestionModal();
-          showToast(`Matagumpay na nalikha ang tanong '${created.code || code}'.`, 'success');
+          showToast(`Matagumpay na nalikha ang tanong '${created.code || payload.code}'.`, 'success');
           loadQuestions();
         } catch (err) {
           if (alertEl) {
@@ -2105,86 +2686,24 @@
     if (editQuestionForm) {
       editQuestionForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const codeInput = document.getElementById('edit-q-code');
-        const promptInput = document.getElementById('edit-q-prompt');
-        const titleInput = document.getElementById('edit-q-title');
-        const pointsInput = document.getElementById('edit-q-points');
-        const timeLimitInput = document.getElementById('edit-q-timelimit');
-        const expInput = document.getElementById('edit-q-explanation');
-        const hintInput = document.getElementById('edit-q-hint');
-        const expectedInput = document.getElementById('edit-q-expected-answer');
-        const choicesContainer = document.getElementById('edit-q-choices-list');
-
         const alertEl = document.getElementById('edit-question-alert');
-        const promptErr = document.getElementById('edit-q-prompt-error');
-        const choiceErr = document.getElementById('edit-q-choice-error');
-        const expectedErr = document.getElementById('edit-q-expected-error');
         const submitBtn = document.getElementById('btn-submit-edit-question');
 
         if (alertEl) alertEl.style.display = 'none';
-        if (promptErr) promptErr.classList.remove('active');
-        if (choiceErr) choiceErr.classList.remove('active');
-        if (expectedErr) expectedErr.classList.remove('active');
 
-        const code = (codeInput?.value || '').trim();
-        const prompt = (promptInput?.value || '').trim();
-        const title = (titleInput?.value || '').trim();
-        const points = parseInt(pointsInput?.value, 10) || 1;
-        const timeLimit = timeLimitInput?.value ? parseInt(timeLimitInput.value, 10) : null;
-        const explanation = (expInput?.value || '').trim();
-        const hint = (hintInput?.value || '').trim() || null;
-
-        if (!prompt) {
-          if (promptErr) promptErr.classList.add('active');
-          return;
-        }
-
-        const isMultipleChoice = _activeEditingQuestion?.questionType === 'multiple_choice';
-        let choices = [];
-        let answerKey = null;
-        let expectedAnswer = null;
-
-        if (isMultipleChoice) {
-          const extracted = getChoicesFromEditor(choicesContainer);
-          choices = extracted.choices;
-          answerKey = extracted.answerKey;
-          if (choices.length < 2 || !answerKey) {
-            if (choiceErr) choiceErr.classList.add('active');
-            return;
-          }
-        } else {
-          expectedAnswer = (expectedInput?.value || '').trim();
-          if (!expectedAnswer) {
-            if (expectedErr) expectedErr.classList.add('active');
-            return;
-          }
-        }
+        const { isValid, payload } = validateQuestionForm('edit', true);
+        if (!isValid || !payload) return;
 
         if (submitBtn) {
           submitBtn.disabled = true;
           submitBtn.textContent = 'Nagse-save ng Bersyon...';
         }
 
-        const revisionPayload = {
-          code,
-          questionType: _activeEditingQuestion.questionType,
-          cardCategory: _activeEditingQuestion.cardCategory,
-          title,
-          prompt,
-          points,
-          timeLimitSeconds: timeLimit,
-          explanation,
-          hint,
-          choices,
-          answerKey,
-          expectedAnswer
-        };
-
         const api = getApi();
         try {
-          const revised = await api.reviseQuestion(code, revisionPayload);
+          const revised = await api.reviseQuestion(payload.code, payload);
           closeEditQuestionModal();
-          showToast(`Nai-save bilang Bagong Borador (v${revised.version}) ang tanong na '${code}'.`, 'success');
+          showToast(`Nai-save bilang Bagong Borador (v${revised.version}) ang tanong na '${payload.code}'.`, 'success');
           loadQuestions();
         } catch (err) {
           if (alertEl) {
@@ -2317,6 +2836,21 @@
     toggleMobileSidebar,
     getCurrentView: () => _currentView,
     loadOverviewStats,
+    renderUserProfile,
+    showDashboardApp,
+    showAuthScreen,
+
+    // Admin-Only Visibility & Controls
+    getVerifiedRole,
+    isAdminUser,
+    applyRoleBasedVisibility,
+    loadSystemStatus,
+    openApiSettingsModal,
+    closeApiSettingsModal,
+    getCurrentProfile: () => _currentProfile,
+    setCurrentProfile: (profile) => {
+      applyRoleBasedVisibility(profile);
+    },
 
     // Topic controls
     loadTopics,
@@ -2358,6 +2892,18 @@
     getChoicesFromEditor,
     getQuestionsList: () => [..._questions],
     setQuestionsList: (list) => { _questions = [...list]; },
+
+    // Dynamic Card Creation & Rubrics (Dynamic Question System)
+    CATEGORY_RULES,
+    applyCategoryDefaults,
+    updateQuestionTypeFormViews,
+    parseAcceptedAnswers,
+    formatAcceptedAnswers,
+    renderRubricGroupsEditor,
+    addRubricGroupRow,
+    renumberRubricGroups,
+    getRubricGroupsFromEditor,
+    validateQuestionForm,
 
     // Rubric controls (Phase 6.6)
     loadRubrics,

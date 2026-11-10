@@ -1,11 +1,32 @@
 const { HttpError } = require('../middleware/httpError');
 
+function sanitizeGameRuleMessage(error) {
+  const raw = String(error?.message || '');
+  if (raw && !/violates|constraint|relation\s+|pg_catalog/i.test(raw)) return raw;
+  return 'The answer violates game rules.';
+}
+
+function sanitizeInvalidResponseMessage(error) {
+  const raw = String(error?.message || '');
+  if (raw && !/violates|constraint|relation\s+|pg_catalog/i.test(raw)) return raw;
+  return 'The answer was not accepted.';
+}
+
 function dbFailure(error, action) {
   if (!error) return;
   if (error.code === '23505') throw new HttpError(409, 'ANSWER_ALREADY_RECORDED', 'An answer for this question and round is already recorded.');
-  if (error.code === 'P0002') throw new HttpError(404, 'SESSION_OR_QUESTION_NOT_FOUND', 'The session or published question was not found.');
-  if (error.code === '23514') throw new HttpError(409, 'GAME_RULE_REJECTED', error.message || 'The answer violates game rules.');
-  if (error.code === '22023') throw new HttpError(400, 'INVALID_RESPONSE', error.message || 'The answer was not accepted.');
+  if (error.code === 'P0002') {
+    const raw = String(error.message || '');
+    if (/no published questions/i.test(raw)) {
+      throw new HttpError(404, 'TOPIC_HAS_NO_QUESTIONS', 'This topic does not have any published questions for the selected game mode yet.');
+    }
+    if (/published topic not found|topic not found/i.test(raw)) {
+      throw new HttpError(404, 'TOPIC_NOT_FOUND', 'The requested published topic was not found.');
+    }
+    throw new HttpError(404, 'SESSION_OR_QUESTION_NOT_FOUND', 'The session or published question was not found.');
+  }
+  if (error.code === '23514') throw new HttpError(409, 'GAME_RULE_REJECTED', sanitizeGameRuleMessage(error));
+  if (error.code === '22023') throw new HttpError(400, 'INVALID_RESPONSE', sanitizeInvalidResponseMessage(error));
   if (error.code === '42501') throw new HttpError(403, 'FORBIDDEN', 'This operation is not permitted for this account.');
   console.error(`[Game] ${action} failed:`, error.code || error.message);
   throw new HttpError(503, 'DATABASE_ERROR', `Unable to ${action.toLowerCase()}.`);

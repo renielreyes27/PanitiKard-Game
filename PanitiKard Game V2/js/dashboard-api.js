@@ -237,6 +237,37 @@
     },
 
     // -------------------------------------------------------------------------
+    // Admin-Only System Status & API Settings Operations
+    // -------------------------------------------------------------------------
+
+    /**
+     * Retrieves system status and API configuration for Administrator accounts only.
+     * Enforced both client-side via verified profile role and server-side via requireAdmin.
+     */
+    async getSystemStatus() {
+      const auth = getAuth();
+      if (!auth) throw new Error('Dashboard authentication is not initialized.');
+      const profile = typeof auth.getProfile === 'function' ? auth.getProfile() : null;
+      if (profile && profile.role !== 'admin') {
+        throw new Error('Administrator role required.');
+      }
+      return auth.apiRequest('/admin/system-status');
+    },
+
+    /**
+     * Retrieves API security & configuration details for Administrator accounts only.
+     */
+    async getApiSettings() {
+      const auth = getAuth();
+      if (!auth) throw new Error('Dashboard authentication is not initialized.');
+      const profile = typeof auth.getProfile === 'function' ? auth.getProfile() : null;
+      if (profile && profile.role !== 'admin') {
+        throw new Error('Administrator role required.');
+      }
+      return auth.apiRequest('/admin/api-settings');
+    },
+
+    // -------------------------------------------------------------------------
     // Overview Metrics Aggregator
     // -------------------------------------------------------------------------
 

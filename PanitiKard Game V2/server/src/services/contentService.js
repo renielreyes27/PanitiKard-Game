@@ -1,10 +1,48 @@
-﻿const { HttpError } = require('../middleware/httpError');
+const { HttpError } = require('../middleware/httpError');
 const { validateQuestionInput, requireText } = require('./questionValidation');
+
+function sanitizeConstraintMessage(error, action) {
+  const raw = String(error?.message || '');
+  if (/publish the topic before publishing/i.test(raw)) {
+    return 'Publish the topic before publishing its question.';
+  }
+  if (/version and scoring rubric must exist/i.test(raw)) {
+    return 'Question version and scoring rubric must exist before publishing.';
+  }
+  return `${action} violates content validation constraints.`;
+}
+
+function sanitizeNotFoundMessage(error, action) {
+  const raw = String(error?.message || '');
+  if (/question not found/i.test(raw)) return 'Question not found.';
+  if (/topic not found/i.test(raw)) return 'Topic not found.';
+  return `${action} target was not found.`;
+}
+
+function sanitizeInvalidInputMessage(error, action) {
+  const raw = String(error?.message || '');
+  if (/question code is required/i.test(raw)) return 'Question code is required.';
+  return `Invalid input for ${action.toLowerCase()}.`;
+}
 
 function check(error, action) {
   if (!error) return;
-  if (error.code === '23505') throw new HttpError(409, 'ALREADY_EXISTS', `${action} conflicts with existing content.`);
   console.error(`[Content] ${action} failed:`, error.code || error.message);
+  if (error.code === '23505') {
+    throw new HttpError(409, 'ALREADY_EXISTS', `${action} conflicts with existing content.`);
+  }
+  if (error.code === '23514') {
+    throw new HttpError(400, 'CONSTRAINT_VIOLATION', sanitizeConstraintMessage(error, action));
+  }
+  if (error.code === 'P0002') {
+    throw new HttpError(404, 'NOT_FOUND', sanitizeNotFoundMessage(error, action));
+  }
+  if (error.code === '42501') {
+    throw new HttpError(403, 'FORBIDDEN', 'Teacher or administrator permission required.');
+  }
+  if (error.code === '22023' || error.code === '23503') {
+    throw new HttpError(400, 'INVALID_INPUT', sanitizeInvalidInputMessage(error, action));
+  }
   throw new HttpError(503, 'DATABASE_ERROR', `Unable to ${action.toLowerCase()}.`);
 }
 

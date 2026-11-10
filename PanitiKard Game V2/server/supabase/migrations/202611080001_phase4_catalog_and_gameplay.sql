@@ -641,7 +641,8 @@ begin
     'isCorrect', v_correct,
     'pointsAwarded', v_points,
     'maxPoints', v_max_points,
-    'evaluationMethod', case when v_is_timeout then 'timeout' else v_method end
+    'evaluationMethod', case when v_is_timeout then 'timeout' else v_method end,
+    'correctAnswer', v_correct_display
   );
 end;
 $$;

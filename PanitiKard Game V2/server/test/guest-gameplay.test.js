@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createServer } = require('node:http');
 const { createApp } = require('../src/server');
+const { createCatalogService } = require('../src/services/catalogService');
 const { createRubricEvaluatorService } = require('../src/services/rubricEvaluator');
 const { generateGuestToken, verifyGuestToken, isGuestToken, getSecret, DEV_DEFAULT_SECRET } = require('../src/services/guestTokenService');
 const config = require('../src/config/environment');
@@ -1900,4 +1901,339 @@ test('Migration 202611090002: enforces SECURITY DEFINER, search_path, duplicate 
   // Guest indexes
   assert.match(migration, /create index if not exists game_sessions_guest_started_idx/i);
   assert.match(migration, /create index if not exists student_answers_guest_idx/i);
+});
+
+// --------------------------------------------------------------------------
+// 16. Release-Critical Gameplay Fixes: Backend Error Handling & Catalog Filtering
+// --------------------------------------------------------------------------
+test('Release fix (C): POST /sessions distinguishes TOPIC_HAS_NO_QUESTIONS, TOPIC_NOT_FOUND, and SESSION_OR_QUESTION_NOT_FOUND without leaking SQL details', async () => {
+  const mockDb = createMockGuestDb();
+  const origRpc = mockDb.rpc.bind(mockDb);
+  mockDb.rpc = (fnName, args) => {
+    if (fnName === 'create_guest_game_session') {
+      if (args.p_topic_code === '5') {
+        const err = new Error('Published topic has no published questions');
+        err.code = 'P0002';
+        return Promise.resolve({ data: null, error: err });
+      }
+      if (args.p_topic_code === 'nonexistent-topic') {
+        const err = new Error('Published topic not found');
+        err.code = 'P0002';
+        return Promise.resolve({ data: null, error: err });
+      }
+    }
+    return origRpc(fnName, args);
+  };
+
+  const app = createApp({
+    evaluatorService: createRubricEvaluatorService(),
+    connectivityCheck: async () => ({ reachable: true }),
+    adminClientFactory: () => mockDb
+  });
+
+  await withServer(app, async (base) => {
+    // 1. Topic 5 (published topic with 0 published questions) -> 404 TOPIC_HAS_NO_QUESTIONS
+    const noQuestionsRes = await fetch(`${base}/api/v1/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topicCode: '5',
+        mode: 'deck',
+        studentName: 'Ralph Reniel Reyes'
+      })
+    });
+    assert.equal(noQuestionsRes.status, 404);
+    const noQuestionsBody = await noQuestionsRes.json();
+    assert.equal(noQuestionsBody.error, 'TOPIC_HAS_NO_QUESTIONS');
+    assert.equal(
+      noQuestionsBody.message,
+      'This topic does not have any published questions for the selected game mode yet.'
+    );
+    assert.doesNotMatch(noQuestionsBody.message, /\b(select|insert|update|p0002|postgres)\b/i);
+
+    // 2. Nonexistent topic -> 404 TOPIC_NOT_FOUND
+    const missingTopicRes = await fetch(`${base}/api/v1/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topicCode: 'nonexistent-topic',
+        mode: 'deck',
+        studentName: 'Ralph Reniel Reyes'
+      })
+    });
+    assert.equal(missingTopicRes.status, 404);
+    const missingTopicBody = await missingTopicRes.json();
+    assert.equal(missingTopicBody.error, 'TOPIC_NOT_FOUND');
+    assert.equal(missingTopicBody.message, 'The requested published topic was not found.');
+
+    // 3. Valid session creation + missing question during answer submission -> 404 SESSION_OR_QUESTION_NOT_FOUND
+    const validSessionRes = await fetch(`${base}/api/v1/sessions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        topicCode: 'elements',
+        mode: 'deck',
+        studentName: 'Ralph Reniel Reyes'
+      })
+    });
+    assert.equal(validSessionRes.status, 201);
+    const { data: session } = await validSessionRes.json();
+
+    const missingQuestionRes = await fetch(`${base}/api/v1/sessions/${session.id}/answers`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.sessionToken}`
+      },
+      body: JSON.stringify({
+        questionCode: 'unknown-question-code',
+        response: 'Test sagot',
+        round: 'main'
+      })
+    });
+    assert.equal(missingQuestionRes.status, 404);
+    const missingQuestionBody = await missingQuestionRes.json();
+    assert.equal(missingQuestionBody.error, 'SESSION_OR_QUESTION_NOT_FOUND');
+    assert.equal(missingQuestionBody.message, 'The session or published question was not found.');
+  });
+});
+
+test('Release fix (D): GET /topics enriches question counts, filters unplayable topics when playableOnly=true, and preserves Quiz-only topics', async () => {
+  const publishedTopics = [
+    {
+      id: 'topic-id-elements',
+      code: 'elements',
+      title: 'Mga Elemento ng Tula',
+      description: 'Pag-unawa sa sukat at tugma',
+      competency: 'Nasusuri ang elemento ng tula',
+      status: 'published',
+      sort_order: 1
+    },
+    {
+      id: 'topic-id-5',
+      code: '5',
+      title: 'Kabanata 4 (Walang Nailathalang Tanong)',
+      description: 'Paksa na may draft lamang',
+      competency: 'Nasusuri ang kabanata',
+      status: 'published',
+      sort_order: 5
+    },
+    {
+      id: 'topic-id-quiz-only',
+      code: 'pagsusulit-kabanata-1',
+      title: 'Pagsusulit sa Kabanata 1',
+      description: 'Maikling pagsusulit na walang kard',
+      competency: 'Nasasagot ang pagsusulit',
+      status: 'published',
+      sort_order: 6
+    }
+  ];
+
+  // Published non-archived questions:
+  // - topic-id-elements has 2 deck questions (card_category_id != null)
+  // - topic-id-5 has 0 published questions (its only question is draft)
+  // - topic-id-quiz-only has 1 published quiz question (card_category_id === null)
+  const publishedQuestions = [
+    { id: 'q-1', topic_id: 'topic-id-elements', card_category_id: 1 },
+    { id: 'q-2', topic_id: 'topic-id-elements', card_category_id: 2 },
+    { id: 'q-3', topic_id: 'topic-id-quiz-only', card_category_id: null }
+  ];
+
+  const mockCatalogClient = {
+    from(table) {
+      if (table === 'topics') {
+        return {
+          select() {
+            return {
+              eq() {
+                return {
+                  is() {
+                    return {
+                      order: async () => ({ data: publishedTopics, error: null })
+                    };
+                  }
+                };
+              }
+            };
+          }
+        };
+      }
+      if (table === 'questions') {
+        return {
+          select() {
+            return {
+              in() {
+                return {
+                  eq() {
+                    return {
+                      is: async () => ({ data: publishedQuestions, error: null })
+                    };
+                  }
+                };
+              }
+            };
+          }
+        };
+      }
+      return {};
+    }
+  };
+
+  const app = createApp({
+    catalogService: createCatalogService({ publicClientFactory: () => mockCatalogClient }),
+    evaluatorService: createRubricEvaluatorService(),
+    connectivityCheck: async () => ({ reachable: true })
+  });
+
+  await withServer(app, async (base) => {
+    // 1. Default GET /topics returns all published topics with enriched counts
+    const allRes = await fetch(`${base}/api/v1/topics`);
+    assert.equal(allRes.status, 200);
+    const allBody = await allRes.json();
+    assert.equal(allBody.data.length, 3);
+
+    const topic5 = allBody.data.find(t => t.code === '5');
+    assert.ok(topic5);
+    assert.equal(topic5.publishedQuestionCount, 0);
+    assert.equal(topic5.deckQuestionCount, 0);
+    assert.equal(topic5.quizQuestionCount, 0);
+    assert.equal(topic5.playable, false);
+    assert.deepEqual(topic5.supportedModes, []);
+
+    const quizTopic = allBody.data.find(t => t.code === 'pagsusulit-kabanata-1');
+    assert.ok(quizTopic);
+    assert.equal(quizTopic.publishedQuestionCount, 1);
+    assert.equal(quizTopic.deckQuestionCount, 0);
+    assert.equal(quizTopic.quizQuestionCount, 1);
+    assert.equal(quizTopic.playable, true);
+    assert.deepEqual(quizTopic.supportedModes, ['quiz']);
+
+    // 2. GET /topics?playableOnly=true excludes Topic 5 (0 published questions) and keeps both Deck and Quiz topics
+    const playableRes = await fetch(`${base}/api/v1/topics?playableOnly=true`);
+    assert.equal(playableRes.status, 200);
+    const playableBody = await playableRes.json();
+    assert.equal(playableBody.data.length, 2);
+    assert.ok(!playableBody.data.some(t => t.code === '5'), 'Topic 5 with 0 published questions must be excluded');
+    assert.ok(playableBody.data.some(t => t.code === 'elements'), 'Deck topic must be included');
+    assert.ok(playableBody.data.some(t => t.code === 'pagsusulit-kabanata-1'), 'Quiz-only topic must NOT be hidden');
+
+    // 3. GET /topics?mode=deck returns only topics with Deck questions
+    const deckRes = await fetch(`${base}/api/v1/topics?mode=deck`);
+    assert.equal(deckRes.status, 200);
+    const deckBody = await deckRes.json();
+    assert.deepEqual(deckBody.data.map(t => t.code), ['elements']);
+
+    // 4. GET /topics?mode=quiz returns only topics with Quiz questions
+    const quizRes = await fetch(`${base}/api/v1/topics?mode=quiz`);
+    assert.equal(quizRes.status, 200);
+    const quizBody = await quizRes.json();
+    assert.deepEqual(quizBody.data.map(t => t.code), ['pagsusulit-kabanata-1']);
+
+    // 5. Invalid mode query returns 400 INVALID_MODE
+    const badModeRes = await fetch(`${base}/api/v1/topics?mode=invalid`);
+    assert.equal(badModeRes.status, 400);
+    const badModeBody = await badModeRes.json();
+    assert.equal(badModeBody.error, 'INVALID_MODE');
+  });
+});
+
+test('Catalog Ordering Regression: catalogService.listQuestions orders Deck cards by category sort_order and Quiz questions naturally', async () => {
+  const TOPIC = { id: 'topic-elem', code: 'elements', title: 'Elemento', status: 'published' };
+
+  // Alphabetically returned by DB (.order('code'))
+  const DB_QUESTIONS = [
+    { id: 'q-bonus', code: 'elem-bonus', topic_id: 'topic-elem', card_category_id: 'cat-4', question_type: 'open_ended', status: 'published', current_version: 1, archived_at: null, card_categories: { code: 'bonus', label: 'Bonus', sort_order: 4 } },
+    { id: 'q-challenge', code: 'elem-challenge', topic_id: 'topic-elem', card_category_id: 'cat-7', question_type: 'open_ended', status: 'published', current_version: 1, archived_at: null, card_categories: { code: 'challenge', label: 'Hamon', sort_order: 7 } },
+    { id: 'q-correction', code: 'elem-correction', topic_id: 'topic-elem', card_category_id: 'cat-3', question_type: 'open_ended', status: 'published', current_version: 1, archived_at: null, card_categories: { code: 'correction', label: 'Pagwawasto', sort_order: 3 } },
+    { id: 'q-help', code: 'elem-help', topic_id: 'topic-elem', card_category_id: 'cat-6', question_type: 'open_ended', status: 'published', current_version: 1, archived_at: null, card_categories: { code: 'help', label: 'Gabay', sort_order: 6 } },
+    { id: 'q-question-10', code: 'elem-question-10', topic_id: 'topic-elem', card_category_id: 'cat-1', question_type: 'multiple_choice', status: 'published', current_version: 1, archived_at: null, card_categories: { code: 'question', label: 'Tanong', sort_order: 1 } },
+    { id: 'q-question-2', code: 'elem-question-2', topic_id: 'topic-elem', card_category_id: 'cat-1', question_type: 'multiple_choice', status: 'published', current_version: 1, archived_at: null, card_categories: { code: 'question', label: 'Tanong', sort_order: 1 } },
+    { id: 'q-reverse', code: 'elem-reverse', topic_id: 'topic-elem', card_category_id: 'cat-5', question_type: 'open_ended', status: 'published', current_version: 1, archived_at: null, card_categories: { code: 'reverse', label: 'Baligtaran', sort_order: 5 } },
+    { id: 'q-statement', code: 'elem-statement', topic_id: 'topic-elem', card_category_id: 'cat-2', question_type: 'open_ended', status: 'published', current_version: 1, archived_at: null, card_categories: { code: 'statement', label: 'Pahayag', sort_order: 2 } },
+    { id: 'q-quiz-1', code: 'alamat-q1', topic_id: 'topic-elem', card_category_id: null, question_type: 'multiple_choice', status: 'published', current_version: 1, archived_at: null, card_categories: null },
+    { id: 'q-quiz-10', code: 'alamat-q10', topic_id: 'topic-elem', card_category_id: null, question_type: 'multiple_choice', status: 'published', current_version: 1, archived_at: null, card_categories: null },
+    { id: 'q-quiz-2', code: 'alamat-q2', topic_id: 'topic-elem', card_category_id: null, question_type: 'identification', status: 'published', current_version: 1, archived_at: null, card_categories: null }
+  ];
+
+  const DB_VERSIONS = DB_QUESTIONS.map((q, idx) => ({
+    id: `ver-${idx + 1}`,
+    question_id: q.id,
+    version_number: 1,
+    question_type: q.question_type,
+    card_category_id: q.card_category_id,
+    card_categories: q.card_categories,
+    title: q.code,
+    prompt: `Prompt for ${q.code}`,
+    explanation: '',
+    hint: null,
+    points: 1,
+    time_limit_seconds: null,
+    difficulty: 'average',
+    category_label: null,
+    tag: null,
+    payload: {},
+    created_at: '2026-01-01T00:00:00Z'
+  }));
+
+  const mockClient = {
+    from: (table) => {
+      const builder = {
+        select: () => builder,
+        eq: () => builder,
+        is: () => builder,
+        in: () => builder,
+        order: () => builder,
+        maybeSingle: async () => ({ data: table === 'topics' ? TOPIC : null, error: null }),
+        then: (resolve) => {
+          if (table === 'questions') return Promise.resolve({ data: DB_QUESTIONS, error: null }).then(resolve);
+          if (table === 'question_versions') return Promise.resolve({ data: DB_VERSIONS, error: null }).then(resolve);
+          if (table === 'question_choices') return Promise.resolve({ data: [], error: null }).then(resolve);
+          return Promise.resolve({ data: [], error: null }).then(resolve);
+        }
+      };
+      return builder;
+    }
+  };
+
+  const service = createCatalogService({ publicClientFactory: () => mockClient });
+
+  // 1. kind = 'cards' returns Deck questions ordered by category sort_order (1..7) and natural alphanumeric code within category 1
+  const cardsResult = await service.listQuestions('elements', mockClient, { kind: 'cards' });
+  assert.deepEqual(
+    cardsResult.questions.map(q => q.code),
+    [
+      'elem-question-2',
+      'elem-question-10',
+      'elem-statement',
+      'elem-correction',
+      'elem-bonus',
+      'elem-reverse',
+      'elem-help',
+      'elem-challenge'
+    ],
+    'Deck questions must follow category sort_order (question -> statement -> correction -> bonus -> reverse -> help -> challenge) with natural code tie-breaker'
+  );
+
+  // 2. kind = 'quiz' returns Quiz questions in natural numeric order (q1, q2, q10)
+  const quizResult = await service.listQuestions('elements', mockClient, { kind: 'quiz' });
+  assert.deepEqual(
+    quizResult.questions.map(q => q.code),
+    ['alamat-q1', 'alamat-q2', 'alamat-q10'],
+    'Quiz questions must be ordered naturally (q1, q2, q10)'
+  );
+});
+
+test('Regression: Answer Submission RPC migrations expose correctAnswer and never leak answers in public catalog', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+
+  const migration1 = fs.readFileSync(path.join(__dirname, '../supabase/migrations/202611080001_phase4_catalog_and_gameplay.sql'), 'utf8');
+  const migration2 = fs.readFileSync(path.join(__dirname, '../supabase/migrations/202611090002_phase5_6_guest_students.sql'), 'utf8');
+
+  // 1. Both migrations return correctAnswer in the RPC response
+  assert.match(migration1, /'correctAnswer',\s*v_correct_display/, 'Phase 4 migration must return correctAnswer');
+  assert.match(migration2, /'correctAnswer',\s*v_correct_display/, 'Phase 5/6 migration must return correctAnswer');
+
+  // 2. Phase 5/6 guest migration persists correctAnswer into evaluation_record
+  assert.match(migration2, /'correctAnswer',\s*v_correct_display\)/, 'Evaluation record must record correctAnswer');
 });

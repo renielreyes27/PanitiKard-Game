@@ -1,5 +1,6 @@
-﻿{
+{
   "scripts": {
+    "build": "echo \"No build step required for static frontend\"",
     "dev": "concurrently -k -n BACKEND,FRONTEND \"npm --prefix server run dev\" \"npx http-server . -p 8080\""
   },
   "devDependencies": {
