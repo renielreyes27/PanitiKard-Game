@@ -22,6 +22,17 @@ const { createRubricEvaluatorService } = require('./services/rubricEvaluator');
 const { createApiRouter } = require('./routes/apiRoutes');
 const { HttpError } = require('./middleware/httpError');
 
+// Canonical Vercel deployment hostnames belonging strictly to panitikard-game-server
+const PANITIKARD_PREVIEW_ORIGIN_REGEX = /^https:\/\/panitikard-game-server(?:-[a-z0-9-]+)?\.vercel\.app$/i;
+
+function isAllowedOrigin(origin, env = config.nodeEnv, allowedOrigins = config.frontendOrigin) {
+  if (!origin) return true;
+  if (env === 'development') return true;
+  if (Array.isArray(allowedOrigins) && allowedOrigins.includes(origin)) return true;
+  if (PANITIKARD_PREVIEW_ORIGIN_REGEX.test(origin)) return true;
+  return false;
+}
+
 function createApp({ catalogService = createCatalogService(), gameService = createGameService(),
   contentService = createContentService(), evaluatorService = createRubricEvaluatorService(), authenticate, connectivityCheck = checkSupabaseConnectivity, adminClientFactory = getSupabaseAdmin } = {}) {
   const app = express();
@@ -48,8 +59,10 @@ function createApp({ catalogService = createCatalogService(), gameService = crea
 
   app.use(cors({
     origin: (origin, callback) => {
-      if (!origin || config.nodeEnv === 'development' || config.frontendOrigin.includes(origin)) return callback(null, true);
-      return callback(new Error('CORS policy rejected this origin.'));
+      if (isAllowedOrigin(origin)) {
+        return callback(null, true);
+      }
+      return callback(new HttpError(403, 'CORS_REJECTED', 'CORS policy rejected this origin.'));
     },
     credentials: true
   }));
@@ -87,7 +100,14 @@ function createApp({ catalogService = createCatalogService(), gameService = crea
       error = new HttpError(400, 'INVALID_JSON', 'Request body must be valid JSON.');
     }
     const status = Number.isInteger(error.status) ? error.status : 500;
-    if (status >= 500) console.error('[PanitiKard API]', error.code || error.name || 'INTERNAL_ERROR');
+    if (status >= 500) {
+      const sanitizedMessage = typeof error.message === 'string'
+        ? error.message.replace(/(bearer\s+)[^\s]+/gi, '$1[REDACTED]').replace(/(key\s*[:=]\s*)[^\s&]+/gi, '$1[REDACTED]')
+        : 'An unexpected internal error occurred.';
+      console.error(`[PanitiKard API 5xx Error] ${error.code || 'INTERNAL_ERROR'}: ${sanitizedMessage}`);
+    } else if (status === 403 && error.code === 'CORS_REJECTED') {
+      console.warn(`[PanitiKard API 403] ${error.message}`);
+    }
     res.status(status).json({
       success: false,
       error: error.code || 'INTERNAL_ERROR',
@@ -139,4 +159,6 @@ if (require.main === module) {
 
 module.exports = app;
 module.exports.createApp = createApp;
+module.exports.isAllowedOrigin = isAllowedOrigin;
+module.exports.PANITIKARD_PREVIEW_ORIGIN_REGEX = PANITIKARD_PREVIEW_ORIGIN_REGEX;
 
