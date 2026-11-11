@@ -2767,15 +2767,18 @@
     const passwordInput = document.getElementById('login-password');
     const submitBtn = document.getElementById('login-submit-btn');
 
+    let isSubmittingStaffLogin = false;
     if (loginForm) {
       loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+        if (isSubmittingStaffLogin) return;
         const auth = getAuth();
         if (!auth) return;
 
         const email = emailInput?.value || '';
         const password = passwordInput?.value || '';
 
+        isSubmittingStaffLogin = true;
         if (submitBtn) {
           submitBtn.disabled = true;
           submitBtn.textContent = 'Sumusuri ng kredensyal...';
@@ -2787,15 +2790,17 @@
           const isAdminRoute = path === '/admin' || path.startsWith('/admin/');
           if (isAdminRoute && profile.role !== 'admin') {
             await auth.signOut(true);
+            isSubmittingStaffLogin = false;
             showAuthScreen('Kailangan ng Administrator (Admin) account upang ma-access ang /admin portal. Para sa guro, mangyaring mag-log in sa /teacher.');
             return;
           }
           showDashboardApp(profile);
           loginForm.reset();
         } catch (err) {
+          isSubmittingStaffLogin = false;
           showAuthScreen(err.message || 'Hindi makapag-sign in. Pakisubukang muli.');
         } finally {
-          if (submitBtn) {
+          if (submitBtn && !_currentProfile) {
             submitBtn.disabled = false;
             submitBtn.textContent = 'Mag-sign In sa Dashboard';
           }

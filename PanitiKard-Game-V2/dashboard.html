@@ -40,8 +40,8 @@
       </div>
 
       <div class="topbar-right">
-        <a href="/" class="btn-game-link" title="Pumunta sa Pangunahing Laro">
-          <span>&#8592;</span>
+        <a href="/" class="btn-game-link" title="Magtungo sa Pangunahing Laro (Student Mode)">
+          <span aria-hidden="true">🎮</span>
           <span class="btn-text">Pumunta sa Laro</span>
         </a>
 
@@ -565,7 +565,12 @@
   <div id="modal-create-topic" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-create-title">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 id="modal-create-title">Lumikha ng Bagong Paksa</h3>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <button type="button" class="btn-internal-back" data-close-modal="create" title="Bumalik sa Dashboard">
+            <span aria-hidden="true">&larr;</span> Bumalik sa Dashboard
+          </button>
+          <h3 id="modal-create-title">Lumikha ng Bagong Paksa</h3>
+        </div>
         <button type="button" class="modal-close-btn" data-close-modal="create" aria-label="Isara">&times;</button>
       </div>
       <form id="form-create-topic" novalidate>
@@ -596,8 +601,10 @@
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn-outline" data-close-modal="create">Kanselahin</button>
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+          <button type="button" class="btn-outline btn-back-to-dash" data-close-modal="create">
+            &larr; Bumalik sa Dashboard
+          </button>
           <button type="submit" id="btn-submit-create-topic" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem;">
             Lumikha bilang Borador
           </button>
@@ -610,7 +617,12 @@
   <div id="modal-edit-topic" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-edit-title">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 id="modal-edit-title">I-edit ang Paksa</h3>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <button type="button" class="btn-internal-back" data-close-modal="edit" title="Bumalik sa Dashboard">
+            <span aria-hidden="true">&larr;</span> Bumalik sa Dashboard
+          </button>
+          <h3 id="modal-edit-title">I-edit ang Paksa</h3>
+        </div>
         <button type="button" class="modal-close-btn" data-close-modal="edit" aria-label="Isara">&times;</button>
       </div>
       <form id="form-edit-topic" novalidate>
@@ -644,8 +656,10 @@
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn-outline" data-close-modal="edit">Kanselahin</button>
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+          <button type="button" class="btn-outline btn-back-to-dash" data-close-modal="edit">
+            &larr; Bumalik sa Dashboard
+          </button>
           <button type="submit" id="btn-submit-edit-topic" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem;">
             I-save ang mga Pagbabago
           </button>
@@ -658,7 +672,12 @@
   <div id="modal-create-question" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-create-q-title">
     <div class="modal-card" style="max-width: 680px;">
       <div class="modal-header">
-        <h3 id="modal-create-q-title">Lumikha ng Bagong Tanong</h3>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <button type="button" class="btn-internal-back" data-close-modal="create-q" title="Bumalik sa Dashboard">
+            <span aria-hidden="true">&larr;</span> Bumalik sa Dashboard
+          </button>
+          <h3 id="modal-create-q-title">Lumikha ng Bagong Tanong</h3>
+        </div>
         <button type="button" class="modal-close-btn" data-close-modal="create-q" aria-label="Isara">&times;</button>
       </div>
       <form id="form-create-question" novalidate>
@@ -801,8 +820,10 @@
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn-outline" data-close-modal="create-q">Kanselahin</button>
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+          <button type="button" class="btn-outline btn-back-to-dash" data-close-modal="create-q">
+            &larr; Bumalik sa Dashboard
+          </button>
           <button type="submit" id="btn-submit-create-question" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem;">
             Lumikha bilang Borador
           </button>
@@ -815,7 +836,12 @@
   <div id="modal-edit-question" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-edit-q-title">
     <div class="modal-card" style="max-width: 680px;">
       <div class="modal-header">
-        <h3 id="modal-edit-q-title">I-edit ang Tanong</h3>
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+          <button type="button" class="btn-internal-back" data-close-modal="edit-q" title="Bumalik sa Dashboard">
+            <span aria-hidden="true">&larr;</span> Bumalik sa Dashboard
+          </button>
+          <h3 id="modal-edit-q-title">I-edit ang Tanong</h3>
+        </div>
         <button type="button" class="modal-close-btn" data-close-modal="edit-q" aria-label="Isara">&times;</button>
       </div>
       <form id="form-edit-question" novalidate>
@@ -952,8 +978,10 @@
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button type="button" class="btn-outline" data-close-modal="edit-q">Kanselahin</button>
+        <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+          <button type="button" class="btn-outline btn-back-to-dash" data-close-modal="edit-q">
+            &larr; Bumalik sa Dashboard
+          </button>
           <button type="submit" id="btn-submit-edit-question" class="btn-primary" style="width: auto; padding: 0.55rem 1.25rem;">
             I-save bilang Bagong Borador
           </button>

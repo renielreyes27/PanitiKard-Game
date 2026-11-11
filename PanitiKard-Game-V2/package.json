@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "test": "npm --prefix server test && node --test tests/*.test.js",
     "build": "node scripts/build.js",
     "dev": "concurrently -k -n BACKEND,FRONTEND \"npm --prefix server run dev\" \"npx http-server . -p 8080\""
   },

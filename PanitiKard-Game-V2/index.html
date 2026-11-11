@@ -53,7 +53,7 @@
       <nav class="drawer-nav">
         <button type="button" class="drawer-link" id="nav-link-welcome">🏠 Welcome Screen</button>
         <button type="button" class="drawer-link" id="nav-link-setup">👤 Student Setup</button>
-        <button type="button" class="drawer-link" id="nav-link-decks">🎴 Mga Topic Deck</button>
+        <button type="button" class="drawer-link" id="nav-link-decks">📚 Mga Paksa</button>
       </nav>
       <div class="drawer-footer">
         <span class="drawer-sub">Baitang 10 &bull; Filipino &bull; PanitiKard V2</span>
@@ -148,7 +148,7 @@
 
             <div class="setup-submit-wrap">
               <button type="submit" id="btn-start-game" class="btn-start-action">
-                <span>Magpatuloy sa mga Deck</span>
+                <span>Magpatuloy sa mga Paksa</span>
                 <span class="btn-arrow" aria-hidden="true">&rarr;</span>
               </button>
             </div>
@@ -310,7 +310,7 @@
         </div>
 
         <!-- Accessible reference title -->
-        <h2 id="deck-screen-title" class="sr-only">Pumili ng Topic Deck</h2>
+        <h2 id="deck-screen-title" class="sr-only">Pumili ng Paksa</h2>
 
       </div>
     </section>
@@ -373,8 +373,8 @@
           <!-- Submit Button -->
           <div id="quiz-submit-wrapper" class="quiz-action-wrapper">
             <button type="button" id="btn-quiz-submit"
-              class="btn btn-primary btn-large btn-quiz-submit btn-action-purple">
-              <span>I-submit ang Sagot</span>
+              class="btn btn-primary btn-large btn-quiz-submit btn-action-purple" disabled>
+              <span>Isumite</span>
               <span class="btn-check-icon" aria-hidden="true">✓</span>
             </button>
           </div>
@@ -425,11 +425,11 @@
         <!-- Screen Header & Info Bar -->
         <header class="card-screen-header">
           <div class="card-screen-top-bar">
-            <button type="button" id="btn-crumb-deck" class="btn-crumb" title="Bumalik sa Pagpili ng Deck">
-              <span>&larr; Mga Deck</span>
+            <button type="button" id="btn-crumb-deck" class="btn-crumb" title="Bumalik sa Pagpili ng Paksa">
+              <span>&larr; Mga Paksa</span>
             </button>
             <div class="card-screen-meta">
-              <span id="card-deck-indicator" class="deck-indicator-pill">Deck: -</span>
+              <span id="card-deck-indicator" class="deck-indicator-pill">Paksa: -</span>
               <span id="card-student-indicator" class="student-indicator-pill">Mag-aaral: -</span>
             </div>
           </div>
@@ -971,7 +971,7 @@
           <div class="result-score-details">
             <div class="result-badge-row">
               <span id="result-percentage-badge" class="result-stat-badge">0% Marka</span>
-              <span id="result-deck-badge" class="result-stat-badge deck-badge">Deck: -</span>
+              <span id="result-deck-badge" class="result-stat-badge deck-badge">Paksa: -</span>
               <span id="result-stat-correct-pill" class="result-stat-badge stat-pill-correct">✓ <span
                   id="result-correct-count">0</span> Tama</span>
               <span id="result-stat-incorrect-pill" class="result-stat-badge stat-pill-incorrect">✗ <span

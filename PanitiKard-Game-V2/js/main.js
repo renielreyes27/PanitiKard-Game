@@ -1004,12 +1004,22 @@ document.addEventListener("DOMContentLoaded", () => {
   function closeTeacherModal() {
     if (teacherModal) teacherModal.classList.add("hidden");
     hideTeacherModalAlert();
+    isSubmittingTeacherAuth = false;
+    if (btnTeacherLoginSubmit) {
+      btnTeacherLoginSubmit.disabled = false;
+      btnTeacherLoginSubmit.textContent = "Mag-sign in";
+    }
     if (teacherLoginForm) teacherLoginForm.reset();
   }
 
   function openTeacherModal() {
     if (teacherModal) {
       hideTeacherModalAlert();
+      isSubmittingTeacherAuth = false;
+      if (btnTeacherLoginSubmit) {
+        btnTeacherLoginSubmit.disabled = false;
+        btnTeacherLoginSubmit.textContent = "Mag-sign in";
+      }
       if (teacherLoginForm) teacherLoginForm.reset();
       teacherModal.classList.remove("hidden");
       if (teacherEmailInput) {
@@ -1042,9 +1052,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  let isSubmittingTeacherAuth = false;
   if (teacherLoginForm) {
     teacherLoginForm.addEventListener("submit", async (e) => {
       e.preventDefault();
+      if (isSubmittingTeacherAuth) return;
       hideTeacherModalAlert();
 
       const email = (teacherEmailInput?.value || "").trim();
@@ -1061,6 +1073,7 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
+      isSubmittingTeacherAuth = true;
       if (btnTeacherLoginSubmit) {
         btnTeacherLoginSubmit.disabled = true;
         btnTeacherLoginSubmit.textContent = "Sumusuri ng kredensyal...";
@@ -1070,12 +1083,16 @@ document.addEventListener("DOMContentLoaded", () => {
         const profile = await auth.signIn(email, password);
         const roleLabel = profile.role === "admin" ? "Admin" : "Guro";
         showTeacherModalAlert(`Matagumpay na nag-sign in bilang ${roleLabel}! Binubuksan ang dashboard...`, "info");
+        if (btnTeacherLoginSubmit) {
+          btnTeacherLoginSubmit.disabled = true;
+          btnTeacherLoginSubmit.textContent = "Binubuksan ang dashboard...";
+        }
         setTimeout(() => {
           window.location.href = "dashboard.html";
         }, 300);
       } catch (err) {
+        isSubmittingTeacherAuth = false;
         showTeacherModalAlert(err.message || "Maling email o password. Pakisubukang muli.");
-      } finally {
         if (btnTeacherLoginSubmit) {
           btnTeacherLoginSubmit.disabled = false;
           btnTeacherLoginSubmit.textContent = "Mag-sign in";
@@ -1355,7 +1372,7 @@ document.addEventListener("DOMContentLoaded", () => {
     beginRemoteGameSession(appState.activeDeckId, "deck");
 
     if (cardDeckIndicator) {
-      cardDeckIndicator.textContent = `Deck: ${deck.title}`;
+      cardDeckIndicator.textContent = `Paksa: ${deck.title}`;
     }
     if (cardStudentIndicator) {
       cardStudentIndicator.textContent = `Mag-aaral: ${appState.studentName || "Mag-aaral"}`;
@@ -1585,7 +1602,12 @@ document.addEventListener("DOMContentLoaded", () => {
             selectedOptionKey = opt.key;
             
             const submitBtn = frontCardOptions.querySelector(".btn-submit-choice");
-            if (submitBtn) submitBtn.disabled = false;
+            if (submitBtn) {
+              submitBtn.disabled = false;
+              const span = submitBtn.querySelector("span");
+              if (span) span.textContent = "Isumite";
+              else submitBtn.textContent = "Isumite";
+            }
           });
         }
 
@@ -1600,7 +1622,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!isSubmitted) {
         submitRow.innerHTML = `
           <button type="button" class="btn-submit-choice" disabled>
-            <span>Ipasa ang Sagot</span>
+            <span>Isumite</span>
           </button>
         `;
         const submitBtn = submitRow.querySelector(".btn-submit-choice");
@@ -1659,8 +1681,8 @@ document.addEventListener("DOMContentLoaded", () => {
           rows="2" maxlength="280" ${isSubmitted ? "disabled" : ""}>${isSubmitted ? escapeHtml(submission.userAnswer || "") : ""}</textarea>
         <div class="card-submit-row">
           ${!isSubmitted ? `
-            <button type="button" id="btn-submit-open" class="btn-submit-choice">
-              <span>Ipasa ang Sagot</span>
+            <button type="button" id="btn-submit-open" class="btn-submit-choice" disabled>
+              <span>Isumite</span>
             </button>
           ` : `
             <span class="feedback-badge feedback-submitted">
@@ -1703,6 +1725,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
           textarea.addEventListener("click", (e) => e.stopPropagation());
           textarea.addEventListener("input", () => {
+            const hasText = textarea.value.trim().length > 0;
+            btnSubmitOpen.disabled = !hasText;
+            const span = btnSubmitOpen.querySelector("span");
+            if (span) span.textContent = "Isumite";
+            else btnSubmitOpen.textContent = "Isumite";
             const errBox = document.getElementById("open-error-container");
             if (errBox) errBox.classList.add("hidden");
           });
@@ -1781,9 +1808,14 @@ document.addEventListener("DOMContentLoaded", () => {
           cardFeedbackIcon.textContent = isOk ? "✓" : (isPartial ? "◐" : "✗");
         }
         if (cardFeedbackStatus) {
-          cardFeedbackStatus.textContent = isPartial
-            ? "BAHAGYANG TAMA"
-            : (isOk ? "TAMA!" : (submission.isTimeout ? "NAUBOS ANG ORAS!" : "HINDI TUMUGMA"));
+          const isMultipleChoiceCard = cardData.questionType === "multiple_choice" || (Array.isArray(cardData.options) && cardData.options.length > 0);
+          if (isMultipleChoiceCard) {
+            cardFeedbackStatus.textContent = isOk ? "WASTO!" : (submission.isTimeout ? "NAUBOS ANG ORAS!" : "DI-WASTO");
+          } else {
+            cardFeedbackStatus.textContent = isPartial
+              ? "BAHAGYANG TAMA"
+              : (isOk ? "TAMA!" : (submission.isTimeout ? "NAUBOS ANG ORAS!" : "HINDI TUMUGMA"));
+          }
         }
         if (cardFeedbackPoints) {
           cardFeedbackPoints.textContent = `+${submission.pointsEarned} ${submission.pointsEarned === 1 ? "Punto" : "Puntos"}`;
@@ -1852,7 +1884,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     let initialCorrect = resolveCorrectAnswerDisplay(cardData.answer, cardData.options) || cardData.answer || "";
-    const isCorrect = Boolean(cardData.answer && selectedKey === cardData.answer);
+    const normUser = (selectedKey || "").trim().toUpperCase();
+    const normAns = (cardData.answer || "").trim().toUpperCase();
+    const matchedOption = Array.isArray(cardData.options)
+      ? cardData.options.find(opt => (opt.key || "").toUpperCase() === normUser)
+      : null;
+    const isCorrect = Boolean(
+      cardData.answer && (
+        normUser === normAns ||
+        (matchedOption && matchedOption.text && cardData.answer.trim().toLowerCase() === matchedOption.text.trim().toLowerCase()) ||
+        (Array.isArray(cardData.options) && cardData.options.some(opt => (opt.key || "").toUpperCase() === normAns && opt.key.toUpperCase() === normUser))
+      )
+    );
     const pointsEarned = isCorrect ? cardData.points : 0;
 
     appState.answers[cardData.id] = {
@@ -1967,14 +2010,48 @@ document.addEventListener("DOMContentLoaded", () => {
     // Visual loading state on the submit button
     const submitBtn = document.getElementById("btn-submit-open");
     const textarea = document.getElementById("open-answer-input");
-    const originalBtnContent = submitBtn ? submitBtn.innerHTML : "";
 
     if (submitBtn) {
       submitBtn.disabled = true;
-      submitBtn.innerHTML = `<span>⏳ Sinusuri ng AI...</span>`;
+      submitBtn.innerHTML = `<span>⏳ Sinusuri ang sagot...</span>`;
     }
     if (textarea) {
       textarea.disabled = true;
+    }
+
+    function restoreSubmitButtonOnFailure() {
+      appState.isEvaluatingAnswer = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<span>Isumite</span>`;
+      }
+      if (textarea) {
+        textarea.disabled = false;
+      }
+    }
+
+    function renderOpenCardError(msg) {
+      restoreSubmitButtonOnFailure();
+      const openCardForm = document.querySelector(".open-card-form");
+      let errorContainer = document.getElementById("open-error-container");
+      if (!errorContainer && openCardForm) {
+        errorContainer = document.createElement("div");
+        errorContainer.id = "open-error-container";
+        errorContainer.className = "alert-box alert-error";
+        errorContainer.style.marginTop = "8px";
+        errorContainer.style.padding = "8px 12px";
+        errorContainer.style.fontSize = "0.85rem";
+        const submitRow = openCardForm.querySelector(".card-submit-row");
+        if (submitRow) {
+          openCardForm.insertBefore(errorContainer, submitRow);
+        } else {
+          openCardForm.appendChild(errorContainer);
+        }
+      }
+      if (errorContainer) {
+        errorContainer.classList.remove("hidden");
+        errorContainer.innerHTML = `⚠️ <span>${msg}</span>`;
+      }
     }
 
     // Determine whether a backend is configured for this deployment.
@@ -2100,44 +2177,12 @@ document.addEventListener("DOMContentLoaded", () => {
         isCorrect: false,
         pointsEarned: 0,
         maxPoints: cardData.points || 1,
-        feedback: "Hindi maabot ang serbisyo ng AI para sa pagsusuri. Pakisubukang muli.",
+        feedback: "Hindi maabot ang serbisyo ng pagsusuri para sa sagot. Pakisubukang muli.",
         evaluationMethod: "unavailable"
       };
-    } finally {
-      appState.isEvaluatingAnswer = false;
-      if (submitBtn) {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = originalBtnContent;
-      }
-      if (textarea) {
-        textarea.disabled = false;
-      }
     }
 
-    function renderOpenCardError(msg) {
-      const openCardForm = document.querySelector(".open-card-form");
-      let errorContainer = document.getElementById("open-error-container");
-      if (!errorContainer && openCardForm) {
-        errorContainer = document.createElement("div");
-        errorContainer.id = "open-error-container";
-        errorContainer.className = "alert-box alert-error";
-        errorContainer.style.marginTop = "8px";
-        errorContainer.style.padding = "8px 12px";
-        errorContainer.style.fontSize = "0.85rem";
-        const submitRow = openCardForm.querySelector(".card-submit-row");
-        if (submitRow) {
-          openCardForm.insertBefore(errorContainer, submitRow);
-        } else {
-          openCardForm.appendChild(errorContainer);
-        }
-      }
-      if (errorContainer) {
-        errorContainer.classList.remove("hidden");
-        errorContainer.innerHTML = `⚠️ <span>${msg}</span>`;
-      }
-    }
-
-    // When backend is configured but Gemini evaluation failed: fail closed and allow retry.
+    // When backend is configured but evaluation failed: fail closed and allow retry.
     // When no backend is configured (standalone classroom mode): continue using local evaluator result.
     if (!isTimeout && (!evalResult || evalResult.available === false || evalResult.success === false)) {
       if (backendConfigured) {
@@ -2170,9 +2215,20 @@ document.addEventListener("DOMContentLoaded", () => {
         timeLimit: cardData.timeLimit || cardData.timeLimitSeconds || null
       });
     } catch (persistErr) {
-      console.warn("[Main] Failed to record answer to official game session:", persistErr.message);
-      renderOpenCardError(`Hindi maitala ang opisyal na marka sa iyong sesyon (${persistErr.message || "Network Error"}). Pakisubukang muli.`);
-      return;
+      const errMsg = (persistErr && persistErr.message) ? persistErr.message.toLowerCase() : "";
+      if (errMsg.includes("already been recorded") || errMsg.includes("duplicate") || errMsg.includes("23505")) {
+        console.warn("[Main] Duplicate answer caught; proceeding safely for card:", cardData.id);
+        officialRecord = {
+          isCorrect: evalResult.isCorrect,
+          pointsAwarded: evalResult.pointsEarned,
+          correctAnswer: cardData.answer,
+          evaluationMethod: evalResult.evaluationMethod || "rubric_evaluator"
+        };
+      } else {
+        console.warn("[Main] Failed to record answer to official game session:", persistErr.message);
+        renderOpenCardError(`Hindi maitala ang opisyal na marka sa iyong sesyon (${persistErr.message || "Network Error"}). Pakisubukang muli.`);
+        return;
+      }
     }
 
     // Require a valid official RPC response when a backend session is active.
@@ -2244,6 +2300,7 @@ document.addEventListener("DOMContentLoaded", () => {
       isTimeout: isTimeout,
       submittedAt: new Date().toISOString()
     };
+    appState.isEvaluatingAnswer = false;
 
     // Record incorrect question for Reverse Round
     if (!authoritativeCorrect) {
@@ -2463,11 +2520,15 @@ document.addEventListener("DOMContentLoaded", () => {
     // 1. Multiple Choice
     if (qType === "multiple_choice") {
       const normUser = studentInput.trim().toUpperCase();
-      const normAns = question.answer.trim().toUpperCase();
-      if (normUser === normAns) return true;
+      const normAns = (question.answer || "").trim().toUpperCase();
+      if (normAns && normUser === normAns) return true;
       if (Array.isArray(question.choices)) {
-        const matchedChoice = question.choices.find(c => c.key.toUpperCase() === normAns);
-        if (matchedChoice && normalizeQuizString(matchedChoice.text) === normalizedInput) {
+        const matchedChoiceByKey = question.choices.find(c => (c.key || "").toUpperCase() === normAns);
+        if (matchedChoiceByKey && (normUser === (matchedChoiceByKey.key || "").toUpperCase() || normalizeQuizString(matchedChoiceByKey.text) === normalizedInput)) {
+          return true;
+        }
+        const matchedChoiceByText = question.choices.find(c => normalizeQuizString(c.text || "") === normalizeQuizString(question.answer));
+        if (matchedChoiceByText && (normUser === (matchedChoiceByText.key || "").toUpperCase() || normalizedInput === normalizeQuizString(matchedChoiceByText.text))) {
           return true;
         }
       }
@@ -2477,10 +2538,10 @@ document.addEventListener("DOMContentLoaded", () => {
     // 2. True or False
     if (qType === "true_false") {
       const normUser = studentInput.trim().toLowerCase();
-      const normAns = question.answer.trim().toLowerCase();
-      if (normUser === normAns) return true;
-      if (normAns === "true" && (normUser === "tama" || normUser === "t")) return true;
-      if (normAns === "false" && (normUser === "mali" || normUser === "m")) return true;
+      const normAns = (question.answer || "").trim().toLowerCase();
+      if (normAns && normUser === normAns) return true;
+      if ((normAns === "true" || normAns === "tama") && (normUser === "true" || normUser === "tama" || normUser === "t")) return true;
+      if ((normAns === "false" || normAns === "mali") && (normUser === "false" || normUser === "mali" || normUser === "m")) return true;
       return false;
     }
 
@@ -2589,7 +2650,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (quizAlertBox) quizAlertBox.classList.add("hidden");
     if (quizFeedbackBox) quizFeedbackBox.classList.add("hidden");
     if (quizSubmitWrapper) quizSubmitWrapper.classList.remove("hidden");
-    if (btnQuizSubmit) btnQuizSubmit.disabled = false;
+    if (btnQuizSubmit) btnQuizSubmit.disabled = true;
 
     if (quizInputContainer) {
       quizInputContainer.innerHTML = "";
@@ -2618,6 +2679,7 @@ document.addEventListener("DOMContentLoaded", () => {
             grid.querySelectorAll(".quiz-mc-option").forEach(b => b.classList.remove("selected"));
             btn.classList.add("selected");
             if (quizAlertBox) quizAlertBox.classList.add("hidden");
+            if (btnQuizSubmit) btnQuizSubmit.disabled = false;
           });
           grid.appendChild(btn);
         });
@@ -2646,6 +2708,7 @@ document.addEventListener("DOMContentLoaded", () => {
             group.querySelectorAll(".quiz-tf-btn").forEach(b => b.classList.remove("selected"));
             btn.classList.add("selected");
             if (quizAlertBox) quizAlertBox.classList.add("hidden");
+            if (btnQuizSubmit) btnQuizSubmit.disabled = false;
           });
           group.appendChild(btn);
         });
@@ -2659,6 +2722,8 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
         const inputEl = wrap.querySelector("#quiz-text-answer");
         inputEl.addEventListener("input", () => {
+          const hasVal = inputEl.value.trim().length > 0;
+          if (btnQuizSubmit) btnQuizSubmit.disabled = !hasVal;
           if (quizAlertBox) quizAlertBox.classList.add("hidden");
         });
         inputEl.addEventListener("keydown", (e) => {
@@ -2678,6 +2743,8 @@ document.addEventListener("DOMContentLoaded", () => {
         `;
         const inputEl = wrap.querySelector("#quiz-text-answer");
         inputEl.addEventListener("input", () => {
+          const hasVal = inputEl.value.trim().length > 0;
+          if (btnQuizSubmit) btnQuizSubmit.disabled = !hasVal;
           if (quizAlertBox) quizAlertBox.classList.add("hidden");
         });
         inputEl.addEventListener("keydown", (e) => {
@@ -2751,17 +2818,28 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (q.questionType === "multiple_choice") {
+      const normAnsKey = (q.answer || "").trim().toUpperCase();
+      const matchedChoice = Array.isArray(q.choices)
+        ? q.choices.find(c => (c.key || "").toUpperCase() === normAnsKey || normalizeQuizString(c.text) === normalizeQuizString(q.answer))
+        : null;
+      const targetKey = matchedChoice ? matchedChoice.key.toUpperCase() : normAnsKey;
+
       const opts = quizInputContainer.querySelectorAll(".quiz-mc-option");
       opts.forEach(opt => {
-        const key = opt.dataset.key;
-        if (key === q.answer) opt.classList.add("opt-correct");
-        if (key === studentInput && !isCorrect) opt.classList.add("opt-incorrect");
+        const key = (opt.dataset.key || "").toUpperCase();
+        if (key === targetKey) opt.classList.add("opt-correct");
+        if (key === (studentInput || "").toUpperCase() && !isCorrect) opt.classList.add("opt-incorrect");
       });
     } else if (q.questionType === "true_false") {
       const btns = quizInputContainer.querySelectorAll(".quiz-tf-btn");
       btns.forEach(btn => {
         const val = btn.dataset.val;
-        if (val.toLowerCase() === q.answer.toLowerCase()) btn.classList.add("opt-correct");
+        const normVal = (val || "").toLowerCase();
+        const normAns = (q.answer || "").toLowerCase();
+        const isOptCorrect = normVal === normAns ||
+          (normVal === "true" && (normAns === "true" || normAns === "tama")) ||
+          (normVal === "false" && (normAns === "false" || normAns === "mali"));
+        if (isOptCorrect) btn.classList.add("opt-correct");
         if (val === studentInput && !isCorrect) btn.classList.add("opt-incorrect");
       });
     }
@@ -2844,7 +2922,13 @@ document.addEventListener("DOMContentLoaded", () => {
         quizFeedbackHeader.className = `feedback-header ${isCorrect ? "feedback-correct" : "feedback-incorrect"}`;
       }
       if (quizFeedbackIcon) quizFeedbackIcon.textContent = isCorrect ? "✓" : "✗";
-      if (quizFeedbackStatus) quizFeedbackStatus.textContent = isCorrect ? "TAMA!" : "MALI";
+      if (quizFeedbackStatus) {
+        if (q.questionType === "multiple_choice") {
+          quizFeedbackStatus.textContent = isCorrect ? "WASTO!" : "MALI";
+        } else {
+          quizFeedbackStatus.textContent = isCorrect ? "TAMA!" : "MALI";
+        }
+      }
       if (quizFeedbackPoints) {
         quizFeedbackPoints.textContent = isCorrect 
           ? `+${pointsEarned} ${pointsEarned > 1 ? "Puntos" : "Punto"}`
@@ -3126,7 +3210,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (reverseAlertBox) reverseAlertBox.classList.add("hidden");
     if (reverseFeedbackBox) reverseFeedbackBox.classList.add("hidden");
     if (reverseSubmitWrap) reverseSubmitWrap.classList.add("hidden");
-    if (btnReverseSubmit) btnReverseSubmit.disabled = false;
+    if (btnReverseSubmit) {
+      btnReverseSubmit.disabled = true;
+      const span = (typeof btnReverseSubmit.querySelector === "function") ? btnReverseSubmit.querySelector("span") : null;
+      if (span) span.textContent = "Isumite";
+      else btnReverseSubmit.textContent = "Isumite";
+    }
 
     // Render Options / Inputs
     if (reverseCardOptions) {
@@ -3156,6 +3245,12 @@ document.addEventListener("DOMContentLoaded", () => {
             grid.querySelectorAll(".quiz-mc-option").forEach(b => b.classList.remove("selected"));
             btn.classList.add("selected");
             if (reverseAlertBox) reverseAlertBox.classList.add("hidden");
+            if (btnReverseSubmit) {
+              btnReverseSubmit.disabled = false;
+              const span = (typeof btnReverseSubmit.querySelector === "function") ? btnReverseSubmit.querySelector("span") : null;
+              if (span) span.textContent = "Isumite";
+              else btnReverseSubmit.textContent = "Isumite";
+            }
           });
           grid.appendChild(btn);
         });
@@ -3187,6 +3282,12 @@ document.addEventListener("DOMContentLoaded", () => {
             group.querySelectorAll(".quiz-tf-btn").forEach(b => b.classList.remove("selected"));
             btn.classList.add("selected");
             if (reverseAlertBox) reverseAlertBox.classList.add("hidden");
+            if (btnReverseSubmit) {
+              btnReverseSubmit.disabled = false;
+              const span = (typeof btnReverseSubmit.querySelector === "function") ? btnReverseSubmit.querySelector("span") : null;
+              if (span) span.textContent = "Isumite";
+              else btnReverseSubmit.textContent = "Isumite";
+            }
           });
           group.appendChild(btn);
         });
@@ -3205,6 +3306,12 @@ document.addEventListener("DOMContentLoaded", () => {
         textarea.addEventListener("click", (e) => e.stopPropagation());
         textarea.addEventListener("input", () => {
           if (reverseAlertBox) reverseAlertBox.classList.add("hidden");
+          if (btnReverseSubmit) {
+            btnReverseSubmit.disabled = !textarea.value.trim();
+            const span = (typeof btnReverseSubmit.querySelector === "function") ? btnReverseSubmit.querySelector("span") : null;
+            if (span) span.textContent = "Isumite";
+            else btnReverseSubmit.textContent = "Isumite";
+          }
         });
         textarea.addEventListener("keydown", (e) => {
           if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
@@ -3228,6 +3335,12 @@ document.addEventListener("DOMContentLoaded", () => {
         inputEl.addEventListener("click", (e) => e.stopPropagation());
         inputEl.addEventListener("input", () => {
           if (reverseAlertBox) reverseAlertBox.classList.add("hidden");
+          if (btnReverseSubmit) {
+            btnReverseSubmit.disabled = !inputEl.value.trim();
+            const span = (typeof btnReverseSubmit.querySelector === "function") ? btnReverseSubmit.querySelector("span") : null;
+            if (span) span.textContent = "Isumite";
+            else btnReverseSubmit.textContent = "Isumite";
+          }
         });
         inputEl.addEventListener("keydown", (e) => {
           if (e.key === "Enter") {
@@ -3412,7 +3525,15 @@ document.addEventListener("DOMContentLoaded", () => {
         reverseFeedbackIcon.textContent = isTimeout ? "⏱️" : (isCorrect ? "✓" : "✗");
       }
       if (reverseFeedbackStatus) {
-        reverseFeedbackStatus.textContent = isTimeout ? "NAUBOS ANG ORAS!" : (isCorrect ? "TAMA SA REVERSE ROUND!" : "HINDI TUMUGMA");
+        if (isTimeout) {
+          reverseFeedbackStatus.textContent = "NAUBOS ANG ORAS!";
+        } else if (isCorrect) {
+          reverseFeedbackStatus.textContent = q.questionType === "multiple_choice"
+            ? "WASTO SA REVERSE ROUND!"
+            : "TAMA SA REVERSE ROUND!";
+        } else {
+          reverseFeedbackStatus.textContent = "HINDI TUMUGMA";
+        }
       }
       if (reverseFeedbackPoints) {
         reverseFeedbackPoints.textContent = isCorrect
@@ -3541,7 +3662,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (resultScoreNum) resultScoreNum.textContent = String(finalTotalScore);
     if (resultScoreMax) resultScoreMax.textContent = String(maxScore);
     if (resultPercentageBadge) resultPercentageBadge.textContent = `${percentage}% Marka`;
-    if (resultDeckBadge) resultDeckBadge.textContent = `Deck: ${deck.title}`;
+    if (resultDeckBadge) resultDeckBadge.textContent = `Paksa: ${deck.title}`;
 
     if (resultCorrectCount) resultCorrectCount.textContent = String(mainCorrectCount);
     if (resultIncorrectCount) resultIncorrectCount.textContent = String(deck.cards.length - mainCorrectCount);
