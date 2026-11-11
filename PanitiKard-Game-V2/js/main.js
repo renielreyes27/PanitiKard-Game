@@ -2083,13 +2083,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (backendConfigured) {
           const pendingSessionPromise = appState.remoteSessionPromise;
-          if (!activeSessionId && pendingSessionPromise && typeof pendingSessionPromise.then === "function") {
-            const initialized = await pendingSessionPromise.catch(() => null);
+          if (pendingSessionPromise && typeof pendingSessionPromise.then === "function") {
+            const initialized = await (appState.remoteWriteQueue || Promise.resolve())
+              .catch(() => null)
+              .then(() => pendingSessionPromise)
+              .catch(() => null);
             if (sessionGeneration !== appState.remoteSessionGeneration) {
               return;
             }
             if (initialized && initialized.generation === sessionGeneration && initialized.session && initialized.session.id) {
               activeSessionId = initialized.session.id;
+              appState.remoteSessionId = initialized.session.id;
+              if (initialized.session.sessionToken && typeof gameApi?.setGuestToken === "function") {
+                gameApi.setGuestToken(initialized.session.sessionToken);
+              }
             } else {
               activeSessionId = appState.remoteSessionId || null;
             }
@@ -2100,10 +2107,9 @@ document.addEventListener("DOMContentLoaded", () => {
           }
 
           const hasToken = Boolean(
-            gameApi && (
-              (typeof gameApi.hasSessionToken === "function" && gameApi.hasSessionToken()) ||
-              (typeof gameApi.hasAccessToken === "function" && gameApi.hasAccessToken())
-            )
+            (gameApi && typeof gameApi.hasSessionToken === "function" && gameApi.hasSessionToken()) ||
+            (gameApi && typeof gameApi.hasAccessToken === "function" && gameApi.hasAccessToken()) ||
+            Boolean(activeSessionId)
           );
 
           if (!activeSessionId || typeof activeSessionId !== "string" || !activeSessionId.trim() || !hasToken) {
