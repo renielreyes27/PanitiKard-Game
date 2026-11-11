@@ -132,6 +132,12 @@
             </button>
           </li>
           <li>
+            <button type="button" class="nav-link-btn" data-nav-target="students" role="tab" aria-selected="false">
+              <span class="nav-icon" aria-hidden="true">&#128101;</span>
+              <span>Mga Tala ng Mag-aaral</span>
+            </button>
+          </li>
+          <li>
             <button type="button" class="nav-link-btn" data-nav-target="account" role="tab" aria-selected="false">
               <span class="nav-icon" aria-hidden="true">&#9881;</span>
               <span>Akaunt at Profile</span>
@@ -506,6 +512,145 @@
               </tr>
             </thead>
             <tbody id="rubrics-tbody">
+              <!-- Dynamically populated by js/dashboard.js -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- View 5: Student Records & Analytics (Phase 7) -->
+      <section id="view-students" class="view-section">
+        <div class="view-header">
+          <div class="view-title-group">
+            <h1>Mga Tala ng Mag-aaral at Pagsusuri</h1>
+            <p>Pagsusuri sa pagganap ng mga panauhing mag-aaral (guest students), kasaysayan ng gameplay, at katumpakan sa bawat paksa.</p>
+          </div>
+          <button type="button" id="btn-refresh-students" class="btn-outline" style="align-self: flex-start; display: inline-flex; align-items: center; gap: 0.4rem;">
+            <span aria-hidden="true">&#8635;</span> I-refresh ang Datos
+          </button>
+        </div>
+
+        <div class="analytics-notice-banner" style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: var(--dash-radius-md); padding: 0.75rem 1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: #1e40af; line-height: 1.45;">
+          <strong>Paunawa sa Pagkakakilanlan:</strong> Ang mga talaan ng mag-aaral ay batay sa normalized guest student names (trim + lowercase), hindi mga verified user accounts. Ang parehong pangalan ng panauhin ay pinagsasama sa ilalim ng isang talaan.
+        </div>
+
+        <!-- 4 Key Analytics Metric Cards -->
+        <div class="stats-grid" style="margin-bottom: 1.5rem;">
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Kabuuang Sesyon ng Laro</span>
+              <span class="stat-card-badge live">Live</span>
+            </div>
+            <div id="stat-analytics-sessions" class="stat-card-value">--</div>
+            <div class="stat-card-desc">Lahat ng sinimulang laro ng mga mag-aaral</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Natatanging Pangalan</span>
+              <span class="stat-card-badge live">Live</span>
+            </div>
+            <div id="stat-analytics-students" class="stat-card-value">--</div>
+            <div class="stat-card-desc">Normalized guest student name snapshots</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Karaniwang Marka (Main Round)</span>
+              <span class="stat-card-badge live">Live</span>
+            </div>
+            <div id="stat-analytics-avg-score" class="stat-card-value">--</div>
+            <div class="stat-card-desc">Porsyento sa mga natapos na laro lamang</div>
+          </div>
+
+          <div class="stat-card">
+            <div class="stat-card-header">
+              <span class="stat-card-label">Antas ng Pagtatapos</span>
+              <span class="stat-card-badge live">Live</span>
+            </div>
+            <div id="stat-analytics-completion" class="stat-card-value">--</div>
+            <div class="stat-card-desc">Bahagdan ng mga natapos kumpara sa kabuuan</div>
+          </div>
+        </div>
+
+        <!-- Filters & Search Toolbar -->
+        <div class="content-panel" style="margin-bottom: 1.5rem;">
+          <div class="panel-header" style="margin-bottom: 1rem;">
+            <h2>Pagsala at Paghahanap (Filters)</h2>
+          </div>
+          <div class="table-toolbar" style="display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center;">
+            <div style="flex: 1; min-width: 220px;">
+              <input type="search" id="student-search-input" class="form-control" placeholder="Maghanap ng mag-aaral ayon sa pangalan..." aria-label="Maghanap ng mag-aaral">
+            </div>
+            <div style="min-width: 180px;">
+              <select id="student-topic-filter" class="form-control" aria-label="Piliin ang Paksa">
+                <option value="all">Lahat ng Paksa</option>
+              </select>
+            </div>
+            <div style="min-width: 160px;">
+              <select id="student-date-filter" class="form-control" aria-label="Piliin ang Saklaw ng Petsa">
+                <option value="all">Lahat ng Petsa</option>
+                <option value="today">Ngayong Araw</option>
+                <option value="7days">Huling 7 Araw</option>
+                <option value="30days">Huling 30 Araw</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Students Data Table -->
+        <div class="content-panel" style="margin-bottom: 1.5rem;">
+          <div class="panel-header">
+            <h2>Talaan ng mga Mag-aaral (Student Records)</h2>
+            <span id="students-count-badge" style="font-size: 0.8rem; color: var(--dash-text-muted);">0 mag-aaral</span>
+          </div>
+
+          <div id="students-loading" style="display: none; padding: 2rem; text-align: center; color: var(--dash-text-muted);">
+            Kinukuha ang mga talaan ng mag-aaral...
+          </div>
+
+          <div id="students-empty" style="display: none; padding: 3rem 1rem; text-align: center; color: var(--dash-text-muted);">
+            <div style="font-size: 2rem; margin-bottom: 0.5rem;">&#128101;</div>
+            <strong>Walang Natagpuang Talaan ng Mag-aaral</strong>
+            <p style="font-size: 0.85rem; margin-top: 0.25rem;">Subukang baguhin ang mga filter o maghintay ng mga bagong gameplay sesyon.</p>
+          </div>
+
+          <table id="students-table" class="data-table" aria-label="Talaan ng mga Mag-aaral">
+            <thead>
+              <tr>
+                <th>Pangalan ng Mag-aaral</th>
+                <th>Kabuuang Sesyon</th>
+                <th>Natapos na Laro</th>
+                <th>Karaniwang Marka (Main)</th>
+                <th>Reverse Practice Puntos</th>
+                <th>Huling Naglaro</th>
+                <th>Aksyon</th>
+              </tr>
+            </thead>
+            <tbody id="students-tbody">
+              <!-- Dynamically populated by js/dashboard.js -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Topic Popularity and Performance Breakdown Panel -->
+        <div class="content-panel">
+          <div class="panel-header">
+            <h2>Pagganap sa Bawat Paksa (Topic Performance &amp; Popularity)</h2>
+          </div>
+
+          <table id="topic-performance-table" class="data-table" aria-label="Pagganap sa Bawat Paksa">
+            <thead>
+              <tr>
+                <th>Paksa</th>
+                <th>Kabuuang Laro</th>
+                <th>Natapos</th>
+                <th>Antas ng Pagtatapos</th>
+                <th>Karaniwang Marka (Main)</th>
+                <th>Karaniwang Reverse Puntos</th>
+              </tr>
+            </thead>
+            <tbody id="topic-performance-tbody">
               <!-- Dynamically populated by js/dashboard.js -->
             </tbody>
           </table>
@@ -1088,6 +1233,73 @@
             Isara
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 9: Student Gameplay History Modal (Phase 7) -->
+  <div id="modal-student-history" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-history-title">
+    <div class="modal-card" style="max-width: 800px;">
+      <div class="modal-header">
+        <div>
+          <h3 id="modal-history-title">Kasaysayan ng Laro ng Mag-aaral</h3>
+          <p id="modal-history-subtitle" style="font-size: 0.85rem; color: var(--dash-text-muted); margin: 0.2rem 0 0 0;">--</p>
+        </div>
+        <button type="button" class="modal-close-btn" data-close-modal="student-history" aria-label="Isara">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="student-history-loading" style="display: none; padding: 2rem; text-align: center; color: var(--dash-text-muted);">
+          Kinukuha ang kasaysayan ng laro...
+        </div>
+        <div id="student-history-empty" style="display: none; padding: 2rem; text-align: center; color: var(--dash-text-muted);">
+          Walang natagpuang sesyon para sa mag-aaral na ito.
+        </div>
+        <table id="student-history-table" class="data-table" aria-label="Kasaysayan ng Laro">
+          <thead>
+            <tr>
+              <th>Petsa at Oras</th>
+              <th>Paksa</th>
+              <th>Uri</th>
+              <th>Katayuan</th>
+              <th>Marka (Main)</th>
+              <th>Reverse Pts</th>
+              <th>Aksyon</th>
+            </tr>
+          </thead>
+          <tbody id="student-history-tbody">
+            <!-- Dynamically populated by js/dashboard.js -->
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-outline" data-close-modal="student-history">Isara</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal 10: Session Breakdown Modal (Phase 7) -->
+  <div id="modal-session-breakdown" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-breakdown-title">
+    <div class="modal-card" style="max-width: 840px;">
+      <div class="modal-header">
+        <div>
+          <h3 id="modal-breakdown-title">Pagsusuri sa Sesyon (Session Breakdown)</h3>
+          <p id="modal-breakdown-subtitle" style="font-size: 0.85rem; color: var(--dash-text-muted); margin: 0.2rem 0 0 0;">--</p>
+        </div>
+        <button type="button" class="modal-close-btn" data-close-modal="session-breakdown" aria-label="Isara">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="session-breakdown-loading" style="display: none; padding: 2rem; text-align: center; color: var(--dash-text-muted);">
+          Kinukuha ang mga sagot at rubric evaluation...
+        </div>
+        <div id="session-breakdown-summary" class="account-details-grid" style="margin-bottom: 1.5rem;">
+          <!-- Dynamically populated by js/dashboard.js -->
+        </div>
+        <div id="session-breakdown-questions">
+          <!-- Dynamically populated question cards -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn-outline" data-close-modal="session-breakdown">Isara</button>
       </div>
     </div>
   </div>

@@ -263,6 +263,171 @@ function createContentService() {
       });
       check(archiveError, 'Archive question');
       return Array.isArray(data) ? data[0] : data;
+    },
+
+    async restoreQuestion(client, questionCode) {
+      const { data: question, error } = await client.from('questions')
+        .select('id, code, current_version, status').eq('code', questionCode).maybeSingle();
+      check(error, 'Load question');
+      if (!question) throw new HttpError(404, 'QUESTION_NOT_FOUND', 'Question not found.');
+      if (question.status !== 'archived') {
+        throw new HttpError(400, 'QUESTION_NOT_ARCHIVED', 'Only archived questions can be restored.');
+      }
+      const { data, error: restoreError } = await client.rpc('publish_question_version', {
+        p_question_id: question.id,
+        p_version_number: question.current_version,
+        p_status: 'draft'
+      });
+      check(restoreError, 'Restore question');
+      return {
+        id: question.id,
+        code: question.code,
+        status: 'draft',
+        currentVersion: question.current_version
+      };
+    },
+
+    async discardDraftRevision(client, questionCode, { adminClient } = {}) {
+      const db = adminClient || client;
+      const { data: question, error } = await client.from('questions')
+        .select('id, code, current_version, status').eq('code', questionCode).maybeSingle();
+      check(error, 'Load question');
+      if (!question) throw new HttpError(404, 'QUESTION_NOT_FOUND', 'Question not found.');
+
+      const { data: maxVersionRow, error: maxErr } = await client.from('question_versions')
+        .select('id, version_number').eq('question_id', question.id)
+        .order('version_number', { ascending: false }).limit(1).maybeSingle();
+      check(maxErr, 'Check question versions');
+
+      if (!maxVersionRow || maxVersionRow.version_number <= question.current_version) {
+        throw new HttpError(400, 'NO_DRAFT_REVISION', 'No unpublished draft revision exists for this question.');
+      }
+
+      const draftVersionId = maxVersionRow.id;
+      const draftVersionNum = maxVersionRow.version_number;
+
+      // Dependency check: verify this draft version was never answered or evaluated
+      const { count: ansCount, error: ansErr } = await db.from('student_answers')
+        .select('id', { count: 'exact', head: true }).eq('question_version_id', draftVersionId);
+      check(ansErr, 'Check answer dependencies');
+      if (ansCount && ansCount > 0) {
+        throw new HttpError(409, 'DRAFT_HAS_DEPENDENCIES', 'Cannot discard draft revision because it has existing gameplay records.');
+      }
+
+      const { count: evalCount, error: evalErr } = await db.from('ai_evaluations')
+        .select('id', { count: 'exact', head: true }).eq('question_version_id', draftVersionId);
+      check(evalErr, 'Check evaluation dependencies');
+      if (evalCount && evalCount > 0) {
+        throw new HttpError(409, 'DRAFT_HAS_DEPENDENCIES', 'Cannot discard draft revision because it has existing evaluation records.');
+      }
+
+      // Safe deletion of unreferenced draft version child rows
+      const { error: choicesErr } = await db.from('question_choices')
+        .delete().eq('question_version_id', draftVersionId);
+      check(choicesErr, 'Delete draft choices');
+
+      const { error: rubricErr } = await db.from('question_evaluation_rubrics')
+        .delete().eq('question_version_id', draftVersionId);
+      check(rubricErr, 'Delete draft rubric');
+
+      const { error: versionErr } = await db.from('question_versions')
+        .delete().eq('id', draftVersionId);
+      check(versionErr, 'Delete draft version');
+
+      return {
+        id: question.id,
+        code: question.code,
+        discardedVersion: draftVersionNum,
+        currentVersion: question.current_version
+      };
+    },
+
+    async deletePermanentTopic(client, code, { adminClient } = {}) {
+      const db = adminClient || client;
+      const { data: topic, error } = await client.from('topics')
+        .select('id, code, status').eq('code', code).maybeSingle();
+      check(error, 'Load topic');
+      if (!topic) throw new HttpError(404, 'TOPIC_NOT_FOUND', 'Topic not found.');
+      if (topic.status === 'published') {
+        throw new HttpError(400, 'CANNOT_DELETE_ACTIVE_TOPIC', 'Published topics cannot be permanently deleted. Archive the topic first.');
+      }
+      if (!['draft', 'archived'].includes(topic.status)) {
+        throw new HttpError(400, 'CANNOT_DELETE_NON_DRAFT', 'Only unreferenced draft or archived topics can be permanently deleted.');
+      }
+
+      // Dependency check: check if any questions exist
+      const { count: qCount, error: qErr } = await db.from('questions')
+        .select('id', { count: 'exact', head: true }).eq('topic_id', topic.id);
+      check(qErr, 'Check question dependencies');
+      if (qCount && qCount > 0) {
+        throw new HttpError(409, 'TOPIC_HAS_QUESTIONS', 'Cannot permanently delete topic because it contains questions. Delete or move the questions first.');
+      }
+
+      // Dependency check: check if any game sessions exist
+      const { count: sCount, error: sErr } = await db.from('game_sessions')
+        .select('id', { count: 'exact', head: true }).eq('topic_id', topic.id);
+      check(sErr, 'Check session dependencies');
+      if (sCount && sCount > 0) {
+        throw new HttpError(409, 'TOPIC_HAS_SESSIONS', 'Cannot permanently delete topic with historical gameplay sessions.');
+      }
+
+      const { error: delErr } = await db.from('topics').delete().eq('id', topic.id);
+      check(delErr, 'Delete topic permanently');
+      return { success: true, deletedCode: code };
+    },
+
+    async deletePermanentQuestion(client, questionCode, { adminClient } = {}) {
+      const db = adminClient || client;
+      const { data: question, error } = await client.from('questions')
+        .select('id, code, status, current_version').eq('code', questionCode).maybeSingle();
+      check(error, 'Load question');
+      if (!question) throw new HttpError(404, 'QUESTION_NOT_FOUND', 'Question not found.');
+      if (question.status === 'published') {
+        throw new HttpError(400, 'CANNOT_DELETE_ACTIVE_QUESTION', 'Published questions cannot be permanently deleted. Archive the question first.');
+      }
+      if (!['draft', 'archived'].includes(question.status)) {
+        throw new HttpError(400, 'CANNOT_DELETE_NON_DRAFT', 'Only unreferenced draft or archived questions can be permanently deleted.');
+      }
+
+      // Dependency check: check student_answers
+      const { count: ansCount, error: ansErr } = await db.from('student_answers')
+        .select('id', { count: 'exact', head: true }).eq('question_id', question.id);
+      check(ansErr, 'Check answer dependencies');
+      if (ansCount && ansCount > 0) {
+        throw new HttpError(409, 'QUESTION_HAS_ANSWERS', 'Cannot permanently delete question with historical student answers. Archive it instead.');
+      }
+
+      // Dependency check: check ai_evaluations
+      const { count: evalCount, error: evalErr } = await db.from('ai_evaluations')
+        .select('id', { count: 'exact', head: true }).eq('question_id', question.id);
+      check(evalErr, 'Check evaluation dependencies');
+      if (evalCount && evalCount > 0) {
+        throw new HttpError(409, 'QUESTION_HAS_EVALUATIONS', 'Cannot permanently delete question with historical evaluations. Archive it instead.');
+      }
+
+      // Get all version IDs for this draft question
+      const { data: versions, error: vErr } = await db.from('question_versions')
+        .select('id').eq('question_id', question.id);
+      check(vErr, 'Load question versions');
+
+      const versionIds = (versions || []).map(v => v.id);
+      if (versionIds.length > 0) {
+        const { error: choicesErr } = await db.from('question_choices')
+          .delete().in('question_version_id', versionIds);
+        check(choicesErr, 'Delete question choices');
+
+        const { error: rubricErr } = await db.from('question_evaluation_rubrics')
+          .delete().in('question_version_id', versionIds);
+        check(rubricErr, 'Delete question rubrics');
+
+        const { error: versionsErr } = await db.from('question_versions')
+          .delete().eq('question_id', question.id);
+        check(versionsErr, 'Delete question versions');
+      }
+
+      const { error: qDelErr } = await db.from('questions').delete().eq('id', question.id);
+      check(qDelErr, 'Delete question permanently');
+      return { success: true, deletedCode: questionCode };
     }
   };
 }

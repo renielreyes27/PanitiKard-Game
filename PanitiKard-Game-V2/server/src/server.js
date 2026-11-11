@@ -19,6 +19,7 @@ const { createCatalogService } = require('./services/catalogService');
 const { createGameService } = require('./services/gameService');
 const { createContentService } = require('./services/contentService');
 const { createRubricEvaluatorService } = require('./services/rubricEvaluator');
+const { createAnalyticsService } = require('./services/analyticsService');
 const { createApiRouter } = require('./routes/apiRoutes');
 const { HttpError } = require('./middleware/httpError');
 
@@ -34,7 +35,7 @@ function isAllowedOrigin(origin, env = config.nodeEnv, allowedOrigins = config.f
 }
 
 function createApp({ catalogService = createCatalogService(), gameService = createGameService(),
-  contentService = createContentService(), evaluatorService = createRubricEvaluatorService(), authenticate, connectivityCheck = checkSupabaseConnectivity, adminClientFactory = getSupabaseAdmin } = {}) {
+  contentService = createContentService(), evaluatorService = createRubricEvaluatorService(), analyticsService = createAnalyticsService(), authenticate, connectivityCheck = checkSupabaseConnectivity, adminClientFactory = getSupabaseAdmin } = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.use(helmet());
@@ -92,7 +93,7 @@ function createApp({ catalogService = createCatalogService(), gameService = crea
     timestamp: new Date().toISOString()
   }));
 
-  app.use('/api/v1', createApiRouter({ catalogService, gameService, contentService, evaluatorService, authenticate, adminClientFactory, connectivityCheck }));
+  app.use('/api/v1', createApiRouter({ catalogService, gameService, contentService, evaluatorService, analyticsService, authenticate, adminClientFactory, connectivityCheck }));
 
   app.use((req, _res, next) => next(new HttpError(404, 'NOT_FOUND', `Route not found: ${req.method} ${req.path}`)));
   app.use((error, _req, res, _next) => {

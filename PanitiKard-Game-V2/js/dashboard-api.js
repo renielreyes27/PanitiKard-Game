@@ -217,6 +217,54 @@
       });
     },
 
+    /**
+     * Restores an archived question to draft status.
+     * @param {string} questionCode
+     */
+    async restoreQuestion(questionCode) {
+      const auth = getAuth();
+      if (!auth) throw new Error('Dashboard authentication is not initialized.');
+      return auth.apiRequest(`/admin/questions/${encodeURIComponent(questionCode)}/restore`, {
+        method: 'POST'
+      });
+    },
+
+    /**
+     * Discards an unpublished draft revision of a question.
+     * @param {string} questionCode
+     */
+    async discardDraftRevision(questionCode) {
+      const auth = getAuth();
+      if (!auth) throw new Error('Dashboard authentication is not initialized.');
+      return auth.apiRequest(`/admin/questions/${encodeURIComponent(questionCode)}/discard-draft`, {
+        method: 'POST'
+      });
+    },
+
+    /**
+     * Permanently deletes an unreferenced draft topic (Admin only).
+     * @param {string} code
+     */
+    async deleteTopicPermanent(code) {
+      const auth = getAuth();
+      if (!auth) throw new Error('Dashboard authentication is not initialized.');
+      return auth.apiRequest(`/admin/topics/${encodeURIComponent(code)}/permanent`, {
+        method: 'DELETE'
+      });
+    },
+
+    /**
+     * Permanently deletes an unreferenced draft question (Admin only).
+     * @param {string} questionCode
+     */
+    async deleteQuestionPermanent(questionCode) {
+      const auth = getAuth();
+      if (!auth) throw new Error('Dashboard authentication is not initialized.');
+      return auth.apiRequest(`/admin/questions/${encodeURIComponent(questionCode)}/permanent`, {
+        method: 'DELETE'
+      });
+    },
+
     // -------------------------------------------------------------------------
     // Rubric Operations (Phase 6.6)
     // -------------------------------------------------------------------------
@@ -265,6 +313,67 @@
         throw new Error('Administrator role required.');
       }
       return auth.apiRequest('/admin/api-settings');
+    },
+
+    // -------------------------------------------------------------------------
+    // Phase 7: Student Records & Analytics Operations
+    // -------------------------------------------------------------------------
+
+    /**
+     * Retrieves high-level game analytics overview.
+     * @param {{ topicCode?: string, dateRange?: string, startDate?: string, endDate?: string }} [filters={}]
+     */
+    async getAnalyticsOverview(filters = {}) {
+      const auth = getAuth();
+      if (!auth) throw new Error('Dashboard authentication is not initialized.');
+      const params = new URLSearchParams();
+      if (filters.topicCode) params.set('topicCode', filters.topicCode);
+      if (filters.dateRange) params.set('dateRange', filters.dateRange);
+      if (filters.startDate) params.set('startDate', filters.startDate);
+      if (filters.endDate) params.set('endDate', filters.endDate);
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      return auth.apiRequest(`/admin/analytics/overview${qs}`);
+    },
+
+    /**
+     * Retrieves paginated list of distinct guest student records with aggregations.
+     * @param {{ search?: string, topicCode?: string, dateRange?: string, startDate?: string, endDate?: string, limit?: number, offset?: number }} [filters={}]
+     */
+    async getStudentsList(filters = {}) {
+      const auth = getAuth();
+      if (!auth) throw new Error('Dashboard authentication is not initialized.');
+      const params = new URLSearchParams();
+      if (filters.search) params.set('search', filters.search);
+      if (filters.topicCode) params.set('topicCode', filters.topicCode);
+      if (filters.dateRange) params.set('dateRange', filters.dateRange);
+      if (filters.startDate) params.set('startDate', filters.startDate);
+      if (filters.endDate) params.set('endDate', filters.endDate);
+      if (filters.limit) params.set('limit', String(filters.limit));
+      if (filters.offset) params.set('offset', String(filters.offset));
+      const qs = params.toString() ? `?${params.toString()}` : '';
+      return auth.apiRequest(`/admin/students${qs}`);
+    },
+
+    /**
+     * Retrieves session history for a specific student name.
+     * @param {string} studentName
+     */
+    async getStudentHistory(studentName) {
+      const auth = getAuth();
+      if (!auth) throw new Error('Dashboard authentication is not initialized.');
+      if (!studentName) throw new Error('Student name is required.');
+      return auth.apiRequest(`/admin/students/${encodeURIComponent(studentName)}/history`);
+    },
+
+    /**
+     * Retrieves question-by-question breakdown for a single game session.
+     * @param {string} sessionId
+     */
+    async getSessionBreakdown(sessionId) {
+      const auth = getAuth();
+      if (!auth) throw new Error('Dashboard authentication is not initialized.');
+      if (!sessionId) throw new Error('Session ID is required.');
+      return auth.apiRequest(`/admin/sessions/${encodeURIComponent(sessionId)}/breakdown`);
     },
 
     // -------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 const express = require('express');
 const { createAuthenticator, createGuestOrUserAuthenticator, requireStaff, requireAdmin } = require('../middleware/authenticate');
 const { createRubricEvaluatorService, validateEvaluationInput } = require('../services/rubricEvaluator');
+const { createAnalyticsService } = require('../services/analyticsService');
 const { generateGuestToken, isGuestToken } = require('../services/guestTokenService');
 const { getSupabaseAdmin, checkSupabaseConnectivity } = require('../services/supabase');
 const { PANITIKARD_DECKS } = require('../../../js/cards-data');
@@ -191,7 +192,7 @@ async function resolveQuestionContext(questionCode, client, options = {}) {
   };
 }
 
-function createApiRouter({ catalogService, gameService, contentService, evaluatorService = createRubricEvaluatorService(), authenticate = createAuthenticator(), adminClientFactory = getSupabaseAdmin, connectivityCheck = checkSupabaseConnectivity }) {
+function createApiRouter({ catalogService, gameService, contentService, evaluatorService = createRubricEvaluatorService(), analyticsService = createAnalyticsService(), authenticate = createAuthenticator(), adminClientFactory = getSupabaseAdmin, connectivityCheck = checkSupabaseConnectivity }) {
   const evaluator = evaluatorService;
   const router = express.Router();
   const guestOrUserAuth = createGuestOrUserAuthenticator({ userAuthenticator: authenticate });
@@ -445,6 +446,39 @@ function createApiRouter({ catalogService, gameService, contentService, evaluato
     res.json({ success: true, data: question });
   }));
 
+  router.post('/admin/questions/:questionCode/archive', authenticate, requireStaff, asyncRoute(async (req, res) => {
+    if (!/^[a-z0-9][a-z0-9-]{0,119}$/.test(req.params.questionCode || '')) throw new HttpError(400, 'INVALID_QUESTION_CODE', 'Invalid question code.');
+    const question = await contentService.archiveQuestion(req.auth.client, req.params.questionCode);
+    res.json({ success: true, data: question });
+  }));
+
+  router.post('/admin/questions/:questionCode/restore', authenticate, requireStaff, asyncRoute(async (req, res) => {
+    if (!/^[a-z0-9][a-z0-9-]{0,119}$/.test(req.params.questionCode || '')) throw new HttpError(400, 'INVALID_QUESTION_CODE', 'Invalid question code.');
+    const question = await contentService.restoreQuestion(req.auth.client, req.params.questionCode);
+    res.json({ success: true, data: question });
+  }));
+
+  router.post('/admin/questions/:questionCode/discard-draft', authenticate, requireStaff, asyncRoute(async (req, res) => {
+    if (!/^[a-z0-9][a-z0-9-]{0,119}$/.test(req.params.questionCode || '')) throw new HttpError(400, 'INVALID_QUESTION_CODE', 'Invalid question code.');
+    const adminClient = typeof adminClientFactory === 'function' ? adminClientFactory() : adminClientFactory;
+    const result = await contentService.discardDraftRevision(req.auth.client, req.params.questionCode, { adminClient });
+    res.json({ success: true, data: result });
+  }));
+
+  router.delete('/admin/topics/:topicCode/permanent', authenticate, requireStaff, asyncRoute(async (req, res) => {
+    const topicCode = topicCodeParam(req);
+    const adminClient = typeof adminClientFactory === 'function' ? adminClientFactory() : adminClientFactory;
+    const result = await contentService.deletePermanentTopic(req.auth.client, topicCode, { adminClient });
+    res.json({ success: true, data: result });
+  }));
+
+  router.delete('/admin/questions/:questionCode/permanent', authenticate, requireStaff, asyncRoute(async (req, res) => {
+    if (!/^[a-z0-9][a-z0-9-]{0,119}$/.test(req.params.questionCode || '')) throw new HttpError(400, 'INVALID_QUESTION_CODE', 'Invalid question code.');
+    const adminClient = typeof adminClientFactory === 'function' ? adminClientFactory() : adminClientFactory;
+    const result = await contentService.deletePermanentQuestion(req.auth.client, req.params.questionCode, { adminClient });
+    res.json({ success: true, data: result });
+  }));
+
   // --------------------------------------------------------------------------
   // Phase 6.6: Rubric Management Endpoints (staff-only read-aggregated views)
   // --------------------------------------------------------------------------
@@ -462,6 +496,62 @@ function createApiRouter({ catalogService, gameService, contentService, evaluato
     }
     const rubrics = await catalogService.listRubrics(req.auth.client, topicCode ? { topicCode } : {});
     res.json({ success: true, data: rubrics });
+  }));
+
+  // --------------------------------------------------------------------------
+  // Phase 7: Student Records & Analytics Endpoints (Staff-only viewing)
+  // --------------------------------------------------------------------------
+
+  // GET /admin/analytics/overview — high-level game analytics
+  router.get('/admin/analytics/overview', authenticate, requireStaff, asyncRoute(async (req, res) => {
+    const topicCode = req.query.topicCode ? String(req.query.topicCode).trim() : null;
+    const dateRange = req.query.dateRange ? String(req.query.dateRange).trim() : null;
+    const startDate = req.query.startDate ? String(req.query.startDate).trim() : null;
+    const endDate = req.query.endDate ? String(req.query.endDate).trim() : null;
+
+    const data = await analyticsService.getOverviewAnalytics(req.auth.client, {
+      topicCode,
+      dateRange,
+      startDate,
+      endDate
+    });
+    res.json({ success: true, data });
+  }));
+
+  // GET /admin/students — list distinct student records with aggregations
+  router.get('/admin/students', authenticate, requireStaff, asyncRoute(async (req, res) => {
+    const search = req.query.search ? String(req.query.search).trim() : '';
+    const topicCode = req.query.topicCode ? String(req.query.topicCode).trim() : null;
+    const dateRange = req.query.dateRange ? String(req.query.dateRange).trim() : null;
+    const startDate = req.query.startDate ? String(req.query.startDate).trim() : null;
+    const endDate = req.query.endDate ? String(req.query.endDate).trim() : null;
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+    const data = await analyticsService.listStudents(req.auth.client, {
+      search,
+      topicCode,
+      dateRange,
+      startDate,
+      endDate,
+      limit,
+      offset
+    });
+    res.json({ success: true, data });
+  }));
+
+  // GET /admin/students/:studentName/history — session history for a student
+  router.get('/admin/students/:studentName/history', authenticate, requireStaff, asyncRoute(async (req, res) => {
+    const studentName = decodeURIComponent(req.params.studentName || '');
+    const data = await analyticsService.getStudentHistory(req.auth.client, studentName);
+    res.json({ success: true, data });
+  }));
+
+  // GET /admin/sessions/:sessionId/breakdown — question-by-question session breakdown
+  router.get('/admin/sessions/:sessionId/breakdown', authenticate, requireStaff, asyncRoute(async (req, res) => {
+    const sessionId = req.params.sessionId;
+    const data = await analyticsService.getSessionBreakdown(req.auth.client, sessionId);
+    res.json({ success: true, data });
   }));
 
   // --------------------------------------------------------------------------

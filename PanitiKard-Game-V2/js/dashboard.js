@@ -16,7 +16,7 @@
   let _currentView = 'overview';
   let _currentProfile = null;
   let _profileCleared = false;
-  const VALID_VIEWS = new Set(['overview', 'topics', 'questions', 'rubrics', 'account']);
+  const VALID_VIEWS = new Set(['overview', 'topics', 'questions', 'rubrics', 'students', 'account']);
 
   // Topic Management State
   let _topics = [];
@@ -35,6 +35,15 @@
   let _rubricTopicFilter = 'all';
   let _rubricStatusFilter = 'all';
   let _rubricSearch = '';
+
+  // Student Records & Analytics State (Phase 7)
+  let _students = [];
+  let _studentTopicFilter = 'all';
+  let _studentDateFilter = 'all';
+  let _studentSearch = '';
+  let _analyticsOverview = null;
+  let _activeStudentHistory = null;
+  let _activeSessionBreakdown = null;
 
   let _pendingConfirmCallback = null;
   let _toastTimer = null;
@@ -136,6 +145,10 @@
       if (_rubrics.length === 0) {
         loadRubrics();
       }
+    } else if (target === 'students') {
+      loadStudentTopicsDropdown();
+      loadAnalyticsOverview();
+      loadStudents();
     }
 
     return target;
@@ -184,8 +197,12 @@
   }
 
   function isAdminUser(profile) {
-    if (profile === null) return false;
     return getVerifiedRole(profile) === 'admin';
+  }
+
+  function isStaffUser(profile) {
+    const role = getVerifiedRole(profile);
+    return role === 'teacher' || role === 'admin';
   }
 
   function applyRoleBasedVisibility(profile) {
@@ -652,14 +669,6 @@
             btnUnpublish.addEventListener('click', () => promptUnpublishTopic(topic));
             tdActions.appendChild(btnUnpublish);
           }
-
-          const btnArchive = document.createElement('button');
-          btnArchive.type = 'button';
-          btnArchive.className = 'btn-action archive';
-          btnArchive.title = 'I-archive ang paksang ito';
-          btnArchive.innerHTML = '&#128465; I-archive';
-          btnArchive.addEventListener('click', () => promptArchiveTopic(topic));
-          tdActions.appendChild(btnArchive);
         } else {
           const btnRestore = document.createElement('button');
           btnRestore.type = 'button';
@@ -669,6 +678,17 @@
           btnRestore.addEventListener('click', () => promptUnpublishTopic(topic, true));
           tdActions.appendChild(btnRestore);
         }
+
+        // Delete action for all statuses (Draft, Published, Archived)
+        const btnDelete = document.createElement('button');
+        btnDelete.type = 'button';
+        btnDelete.className = `btn-action ${topic.status === 'published' ? 'archive' : 'danger-delete'}`;
+        btnDelete.title = topic.status === 'published'
+          ? 'Burahin / I-archive ang aktibong paksa (ililipat sa archive upang maprotektahan ang laro)'
+          : 'Burahin nang tuluyan ang paksang ito (Guro at Admin)';
+        btnDelete.innerHTML = '&#128465; Burahin';
+        btnDelete.addEventListener('click', () => promptDeleteTopic(topic));
+        tdActions.appendChild(btnDelete);
 
         tr.appendChild(tdTitle);
         tr.appendChild(tdComp);
@@ -983,16 +1003,38 @@
         btnEdit.addEventListener('click', () => openEditQuestionModal(q.code));
         tdActions.appendChild(btnEdit);
 
-        // 4. Archive button
-        if (!isArchived) {
-          const btnArchive = document.createElement('button');
-          btnArchive.type = 'button';
-          btnArchive.className = 'btn-action archive';
-          btnArchive.title = 'I-archive ang tanong na ito';
-          btnArchive.innerHTML = '&#128465;';
-          btnArchive.addEventListener('click', () => promptArchiveQuestion(q));
-          tdActions.appendChild(btnArchive);
+        // 4. Discard Draft Revision button (if un-published draft revision exists)
+        if (q.hasDraftRevision) {
+          const btnDiscardDraft = document.createElement('button');
+          btnDiscardDraft.type = 'button';
+          btnDiscardDraft.className = 'btn-action discard';
+          btnDiscardDraft.title = 'Ibasura ang un-published draft revision';
+          btnDiscardDraft.innerHTML = '&#10006; Ibasura ang Borador';
+          btnDiscardDraft.addEventListener('click', () => promptDiscardDraft(q));
+          tdActions.appendChild(btnDiscardDraft);
         }
+
+        // 5. Restore button for archived questions
+        if (isArchived) {
+          const btnRestore = document.createElement('button');
+          btnRestore.type = 'button';
+          btnRestore.className = 'btn-action unpublish';
+          btnRestore.title = 'Ibalik bilang borador upang ma-edit muli';
+          btnRestore.innerHTML = '&#8634; Ibalik sa Borador';
+          btnRestore.addEventListener('click', () => promptRestoreQuestion(q));
+          tdActions.appendChild(btnRestore);
+        }
+
+        // 6. Delete action for all statuses (Draft, Published, Archived)
+        const btnDelete = document.createElement('button');
+        btnDelete.type = 'button';
+        btnDelete.className = `btn-action ${q.status === 'published' ? 'archive' : 'danger-delete'}`;
+        btnDelete.title = q.status === 'published'
+          ? 'Burahin / I-archive ang aktibong tanong (ililipat sa archive upang maprotektahan ang laro)'
+          : 'Burahin nang tuluyan ang tanong na ito (Guro at Admin)';
+        btnDelete.innerHTML = '&#128465; Burahin';
+        btnDelete.addEventListener('click', () => promptDeleteQuestion(q));
+        tdActions.appendChild(btnDelete);
 
         tr.appendChild(tdPrompt);
         tr.appendChild(tdCat);
@@ -1837,7 +1879,7 @@
   function promptArchiveQuestion(question) {
     openConfirmModal({
       title: 'I-archive ang Tanong',
-      message: `Sigurado ka bang nais mong i-archive ang tanong na "${question.code}"? Hindi na ito isasama sa mga bagong sesyon ng laro.`,
+      message: `Sigurado ka bang nais mong i-archive ang tanong na "${question.code}"? Maitatago ito mula sa mga mag-aaral. Mananatili ang mga nakaraang talaan ng laro at resulta. Maaari itong ibalik muli kailanman.`,
       confirmText: 'I-archive',
       confirmClass: 'btn-logout',
       onConfirm: async () => {
@@ -1851,6 +1893,102 @@
         }
       }
     });
+  }
+
+  function promptRestoreQuestion(question) {
+    openConfirmModal({
+      title: 'Ibalik ang Tanong bilang Borador',
+      message: `Nais mo bang ibalik ang tanong na "${question.code}" mula sa archive patungong borador? Maaari na itong i-edit muli.`,
+      confirmText: 'Ibalik sa Borador',
+      confirmClass: 'btn-outline',
+      onConfirm: async () => {
+        const api = getApi();
+        try {
+          await api.restoreQuestion(question.code);
+          showToast(`Naibalik na sa borador ang tanong na "${question.code}".`, 'success');
+          loadQuestions();
+        } catch (err) {
+          showToast(`Nabigong ibalik: ${err.message}`, 'error');
+        }
+      }
+    });
+  }
+
+  function promptDiscardDraft(question) {
+    const draftVer = question.draftVersionNumber || (question.currentVersion ? question.currentVersion + 1 : 2);
+    openConfirmModal({
+      title: 'Ibasura ang Rebisyon ng Borador',
+      message: `Sigurado ka bang nais mong ibasura ang rebisyon (Bersyon ${draftVer}) ng tanong na "${question.code}"? Mananatiling aktibo ang kasalukuyang bersyon ${question.currentVersion || 1}.`,
+      confirmText: 'Ibasura ang Borador',
+      confirmClass: 'btn-logout',
+      onConfirm: async () => {
+        const api = getApi();
+        try {
+          await api.discardDraftRevision(question.code);
+          showToast(`Naibasura na ang borador ng tanong na "${question.code}".`, 'success');
+          loadQuestions();
+        } catch (err) {
+          showToast(`Nabigong ibasura: ${err.message}`, 'error');
+        }
+      }
+    });
+  }
+
+  function promptDeleteQuestion(question) {
+    const isArchived = question.status === 'archived' || Boolean(question.archived_at);
+    if (question.status === 'published') {
+      openConfirmModal({
+        title: 'I-archive ang Aktibong Tanong',
+        message: `Ang tanong na "${question.code}" ay kasalukuyang inilathala sa laro. Upang maprotektahan ang mga mag-aaral, ito ay ililipat muna sa Archive at hindi tuluyang mabubura. Mananatili ang lahat ng nakaraang talaan ng laro at resulta. Nais mo bang magpatuloy?`,
+        confirmText: 'I-archive ang Tanong',
+        confirmClass: 'btn-logout',
+        onConfirm: async () => {
+          const api = getApi();
+          try {
+            await api.archiveQuestion(question.code);
+            showToast(`Nai-archive na ang tanong na "${question.code}".`, 'success');
+            loadQuestions();
+          } catch (err) {
+            showToast(`Nabigong i-archive: ${err.message}`, 'error');
+          }
+        }
+      });
+    } else {
+      if (!isStaffUser()) {
+        showToast('Kailangan ng awtorisadong Guro o Administrator account upang tuluyang mabura ang tanong.', 'error');
+        return;
+      }
+      openConfirmModal({
+        title: 'Burahin nang Tuluyan ang Tanong',
+        message: `BABALA: Nais mo bang burahin nang tuluyan ang ${isArchived ? 'naka-archive na' : 'borador na'} tanong na "${question.code}"? Ang aksyong ito ay permanente at HINDI na maibabalik.`,
+        confirmText: 'Magpatuloy sa Pagbura',
+        confirmClass: 'btn-logout',
+        onConfirm: () => {
+          setTimeout(() => {
+            openConfirmModal({
+              title: 'Huling Kumpirmasyon ng Pagbura',
+              message: `Kumpirmahin ang pagbura ng tanong na "${question.code}". Walang anumang datos ng laro o sagot ng mag-aaral ang dapat nakakabit dito. Kapag may nakakabit na datos, tatanggihan ng server ang pagbura.`,
+              confirmText: 'Oo, Burahin nang Tuluyan',
+              confirmClass: 'btn-logout',
+              onConfirm: async () => {
+                const api = getApi();
+                try {
+                  await api.deleteQuestionPermanent(question.code);
+                  showToast(`Tuluyan nang nabura ang tanong na "${question.code}".`, 'success');
+                  loadQuestions();
+                } catch (err) {
+                  showToast(`Nabigong burahin: ${err.message}`, 'error');
+                }
+              }
+            });
+          }, 150);
+        }
+      });
+    }
+  }
+
+  function promptPermanentDeleteQuestion(question) {
+    promptDeleteQuestion(question);
   }
 
   // ---------------------------------------------------------------------------
@@ -1985,7 +2123,7 @@
   function promptArchiveTopic(topic) {
     openConfirmModal({
       title: 'I-archive ang Paksa',
-      message: `Sigurado ka bang nais mong i-archive ang paksang "${topic.title}" (${topic.code})? Maitatago ito mula sa aktibong listahan at hindi magagamit sa laro.`,
+      message: `Sigurado ka bang nais mong i-archive ang paksang "${topic.title}" (${topic.code})? Maitatago ito mula sa aktibong listahan at hindi magagamit sa laro. Mananatili ang mga nakaraang talaan ng laro at resulta. Maaari itong ibalik muli kailanman.`,
       confirmText: 'I-archive',
       confirmClass: 'btn-logout',
       onConfirm: async () => {
@@ -1999,6 +2137,63 @@
         }
       }
     });
+  }
+
+  function promptDeleteTopic(topic) {
+    const isArchived = topic.status === 'archived' || Boolean(topic.archived_at);
+    if (topic.status === 'published') {
+      openConfirmModal({
+        title: 'I-archive ang Aktibong Paksa',
+        message: `Ang paksang "${topic.title}" (${topic.code}) ay kasalukuyang inilathala sa laro. Upang maprotektahan ang mga mag-aaral, hindi ito maaaring direktang burahin nang tuluyan. Ito ay ililipat muna sa Archive. Mananatili ang lahat ng nakaraang talaan ng laro at resulta. Nais mo bang magpatuloy?`,
+        confirmText: 'I-archive ang Paksa',
+        confirmClass: 'btn-logout',
+        onConfirm: async () => {
+          const api = getApi();
+          try {
+            await api.archiveTopic(topic.code);
+            showToast(`Nai-archive na ang paksang "${topic.title}".`, 'success');
+            loadTopics();
+          } catch (err) {
+            showToast(`Nabigong i-archive: ${err.message}`, 'error');
+          }
+        }
+      });
+    } else {
+      if (!isStaffUser()) {
+        showToast('Kailangan ng awtorisadong Guro o Administrator account upang tuluyang mabura ang paksa.', 'error');
+        return;
+      }
+      openConfirmModal({
+        title: 'Burahin nang Tuluyan ang Paksa',
+        message: `BABALA: Nais mo bang burahin nang tuluyan ang ${isArchived ? 'naka-archive na' : 'borador na'} paksang "${topic.title}" (${topic.code})? Ang aksyong ito ay permanente at HINDI na maibabalik.`,
+        confirmText: 'Magpatuloy sa Pagbura',
+        confirmClass: 'btn-logout',
+        onConfirm: () => {
+          setTimeout(() => {
+            openConfirmModal({
+              title: 'Huling Kumpirmasyon ng Pagbura',
+              message: `Kumpirmahin ang pagbura ng paksang "${topic.title}". Tiyaking walang ibang katanungan o talaan ng laro ang nakakabit dito. Kapag may nakakabit na datos, tatanggihan ng server ang pagbura.`,
+              confirmText: 'Oo, Burahin nang Tuluyan',
+              confirmClass: 'btn-logout',
+              onConfirm: async () => {
+                const api = getApi();
+                try {
+                  await api.deleteTopicPermanent(topic.code);
+                  showToast(`Tuluyan nang nabura ang paksang "${topic.title}".`, 'success');
+                  loadTopics();
+                } catch (err) {
+                  showToast(`Nabigong burahin: ${err.message}`, 'error');
+                }
+              }
+            });
+          }, 150);
+        }
+      });
+    }
+  }
+
+  function promptPermanentDeleteTopic(topic) {
+    promptDeleteTopic(topic);
   }
 
   // ---------------------------------------------------------------------------
@@ -2324,6 +2519,442 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Phase 7: Student Records & Analytics
+  // ---------------------------------------------------------------------------
+
+  async function loadStudentTopicsDropdown() {
+    if (typeof document === 'undefined') return;
+    const sel = document.getElementById('student-topic-filter');
+    if (!sel) return;
+
+    const api = getApi();
+    if (!api) return;
+
+    let topics = _topics;
+    if (!topics.length) {
+      try { topics = await api.getTopics(); } catch { topics = []; }
+    }
+
+    const currentVal = sel.value;
+    while (sel.options.length > 1) sel.remove(1);
+    topics.forEach(t => {
+      const opt = document.createElement('option');
+      opt.value = t.code;
+      opt.textContent = t.title || t.code;
+      sel.appendChild(opt);
+    });
+    if ([...sel.options].some(o => o.value === currentVal)) {
+      sel.value = currentVal;
+    }
+  }
+
+  async function loadAnalyticsOverview() {
+    if (typeof document === 'undefined') return;
+    const api = getApi();
+    if (!api) return;
+
+    const topicCode = _studentTopicFilter !== 'all' ? _studentTopicFilter : undefined;
+    const dateRange = _studentDateFilter !== 'all' ? _studentDateFilter : undefined;
+
+    try {
+      const res = await api.getAnalyticsOverview({ topicCode, dateRange });
+      _analyticsOverview = res;
+      renderAnalyticsOverview(res);
+    } catch (err) {
+      console.warn('[Dashboard] Failed to load analytics overview:', err.message);
+      renderAnalyticsOverview(null);
+    }
+  }
+
+  function renderAnalyticsOverview(data) {
+    if (typeof document === 'undefined') return;
+
+    const sessionsEl = document.getElementById('stat-analytics-sessions');
+    const studentsEl = document.getElementById('stat-analytics-students');
+    const avgScoreEl = document.getElementById('stat-analytics-avg-score');
+    const completionEl = document.getElementById('stat-analytics-completion');
+
+    const summary = data?.summary;
+    if (summary) {
+      if (sessionsEl) sessionsEl.textContent = summary.totalSessions.toLocaleString();
+      if (studentsEl) studentsEl.textContent = summary.distinctStudents.toLocaleString();
+      if (avgScoreEl) avgScoreEl.textContent = `${summary.averageMainScore}%`;
+      if (completionEl) completionEl.textContent = `${summary.completionRate}%`;
+    } else {
+      if (sessionsEl) sessionsEl.textContent = '--';
+      if (studentsEl) studentsEl.textContent = '--';
+      if (avgScoreEl) avgScoreEl.textContent = '--';
+      if (completionEl) completionEl.textContent = '--';
+    }
+
+    renderTopicPerformance(data?.topicPerformance || []);
+  }
+
+  function renderTopicPerformance(topics) {
+    if (typeof document === 'undefined') return;
+    const tbody = document.getElementById('topic-performance-tbody');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    if (!topics || topics.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--dash-text-muted); padding: 1.5rem;">Walang datos ng paksa sa napiling saklaw.</td></tr>';
+      return;
+    }
+
+    topics.forEach(t => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${escapeHtml(t.title)}</strong> <span style="font-family: monospace; font-size: 0.8rem; color: var(--dash-text-muted);">(${escapeHtml(t.code)})</span></td>
+        <td>${t.totalSessions}</td>
+        <td>${t.completedSessions}</td>
+        <td><span class="status-badge ${t.completionRate >= 70 ? 'completed' : 'active'}">${t.completionRate}%</span></td>
+        <td><strong>${t.averageMainScore} pts</strong></td>
+        <td>${t.averageReverseScore > 0 ? `${t.averageReverseScore} pts` : '--'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function loadStudents() {
+    if (typeof document === 'undefined') return;
+    const api = getApi();
+    if (!api) return;
+
+    const loadingEl = document.getElementById('students-loading');
+    const emptyEl = document.getElementById('students-empty');
+    const tableEl = document.getElementById('students-table');
+    const tbody = document.getElementById('students-tbody');
+    const countBadge = document.getElementById('students-count-badge');
+
+    if (loadingEl) loadingEl.style.display = 'block';
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (tableEl) tableEl.style.display = 'none';
+    if (tbody) tbody.innerHTML = '';
+
+    const search = _studentSearch || undefined;
+    const topicCode = _studentTopicFilter !== 'all' ? _studentTopicFilter : undefined;
+    const dateRange = _studentDateFilter !== 'all' ? _studentDateFilter : undefined;
+
+    try {
+      const res = await api.getStudentsList({ search, topicCode, dateRange });
+      _students = res?.students || [];
+      const totalCount = res?.total || _students.length;
+      if (countBadge) {
+        countBadge.textContent = `${totalCount} natatanging mag-aaral`;
+      }
+      renderStudents(_students);
+    } catch (err) {
+      console.error('[Dashboard] Failed to load students list:', err);
+      if (countBadge) countBadge.textContent = 'Error sa pag-load';
+      renderStudents([]);
+    } finally {
+      if (loadingEl) loadingEl.style.display = 'none';
+    }
+  }
+
+  function renderStudents(students) {
+    if (typeof document === 'undefined') return;
+    const emptyEl = document.getElementById('students-empty');
+    const tableEl = document.getElementById('students-table');
+    const tbody = document.getElementById('students-tbody');
+
+    if (!students || students.length === 0) {
+      if (emptyEl) emptyEl.style.display = 'block';
+      if (tableEl) tableEl.style.display = 'none';
+      return;
+    }
+
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (tableEl) tableEl.style.display = 'table';
+    if (tbody) tbody.innerHTML = '';
+
+    students.forEach(st => {
+      const tr = document.createElement('tr');
+      const lastPlayedStr = st.lastPlayedAt ? formatDate(st.lastPlayedAt) : '--';
+
+      tr.innerHTML = `
+        <td>
+          <div style="font-weight: 600; color: var(--dash-text);">${escapeHtml(st.displayName)}</div>
+          <div style="font-size: 0.75rem; color: var(--dash-text-muted); font-family: monospace;">${escapeHtml(st.normalizedName)}</div>
+        </td>
+        <td>${st.totalSessions}</td>
+        <td><span class="status-badge ${st.completedSessions > 0 ? 'completed' : 'draft'}">${st.completedSessions}</span></td>
+        <td><strong>${st.averageMainScore} pts</strong> <span style="font-size: 0.75rem; color: var(--dash-text-muted);">(Pinakamataas: ${st.bestMainScore})</span></td>
+        <td>${st.totalReverseScore > 0 ? `${st.totalReverseScore} pts` : '--'}</td>
+        <td style="font-size: 0.85rem; color: var(--dash-text-muted);">${lastPlayedStr}</td>
+        <td>
+          <button type="button" class="btn-outline btn-view-history" data-student-name="${escapeHtml(st.displayName)}" style="padding: 0.35rem 0.75rem; font-size: 0.82rem;">
+            Tingnan ang Talaan
+          </button>
+        </td>
+      `;
+
+      const btnView = tr.querySelector('.btn-view-history');
+      if (btnView) {
+        btnView.addEventListener('click', (e) => {
+          e.preventDefault();
+          openStudentHistoryModal(st.displayName);
+        });
+      }
+
+      if (tbody) tbody.appendChild(tr);
+    });
+  }
+
+  function setStudentSearch(query) {
+    _studentSearch = (query || '').trim();
+    loadStudents();
+  }
+
+  function setStudentTopicFilter(topicCode) {
+    _studentTopicFilter = topicCode || 'all';
+    loadAnalyticsOverview();
+    loadStudents();
+  }
+
+  function setStudentDateFilter(range) {
+    _studentDateFilter = range || 'all';
+    loadAnalyticsOverview();
+    loadStudents();
+  }
+
+  async function openStudentHistoryModal(studentName) {
+    if (typeof document === 'undefined') return;
+    const modal = document.getElementById('modal-student-history');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('modal-history-title');
+    const subEl = document.getElementById('modal-history-subtitle');
+    const loadingEl = document.getElementById('student-history-loading');
+    const emptyEl = document.getElementById('student-history-empty');
+    const tbody = document.getElementById('student-history-tbody');
+    const tableEl = document.getElementById('student-history-table');
+
+    if (titleEl) titleEl.textContent = `Kasaysayan ng Laro: ${studentName}`;
+    if (subEl) subEl.textContent = 'Normalized guest student records (mula sa pinakabago hanggang pinakaluma)';
+    if (loadingEl) loadingEl.style.display = 'block';
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (tableEl) tableEl.style.display = 'none';
+    if (tbody) tbody.innerHTML = '';
+
+    modal.classList.add('active');
+
+    const api = getApi();
+    if (!api) return;
+
+    try {
+      const data = await api.getStudentHistory(studentName);
+      _activeStudentHistory = data;
+      renderStudentHistory(data);
+    } catch (err) {
+      console.error('[Dashboard] Failed to load student history:', err);
+      if (emptyEl) {
+        emptyEl.textContent = `Hindi ma-load ang kasaysayan: ${err.message}`;
+        emptyEl.style.display = 'block';
+      }
+    } finally {
+      if (loadingEl) loadingEl.style.display = 'none';
+    }
+  }
+
+  function closeStudentHistoryModal() {
+    if (typeof document === 'undefined') return;
+    const modal = document.getElementById('modal-student-history');
+    if (modal) modal.classList.remove('active');
+  }
+
+  function renderStudentHistory(history) {
+    if (typeof document === 'undefined') return;
+    const emptyEl = document.getElementById('student-history-empty');
+    const tableEl = document.getElementById('student-history-table');
+    const tbody = document.getElementById('student-history-tbody');
+
+    const sessions = history?.sessions || [];
+    if (!sessions.length) {
+      if (emptyEl) {
+        emptyEl.textContent = 'Walang natagpuang sesyon para sa mag-aaral na ito.';
+        emptyEl.style.display = 'block';
+      }
+      if (tableEl) tableEl.style.display = 'none';
+      return;
+    }
+
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (tableEl) tableEl.style.display = 'table';
+    if (tbody) tbody.innerHTML = '';
+
+    sessions.forEach(s => {
+      const tr = document.createElement('tr');
+      const dateStr = s.startedAt ? formatDate(s.startedAt) : '--';
+      const statusClass = s.status === 'completed' ? 'completed' : (s.status === 'active' ? 'active' : 'abandoned');
+      const statusLabel = s.status === 'completed' ? 'Natapos' : (s.status === 'active' ? 'Kasalukuyan' : 'Iniwan');
+
+      tr.innerHTML = `
+        <td style="font-size: 0.85rem;">${dateStr}</td>
+        <td><strong>${escapeHtml(s.topicTitle)}</strong> <span style="font-size: 0.75rem; color: var(--dash-text-muted);">(${escapeHtml(s.topicCode)})</span></td>
+        <td><span style="font-size: 0.8rem; text-transform: uppercase;">${escapeHtml(s.mode)}</span></td>
+        <td><span class="status-badge ${statusClass}">${statusLabel}</span></td>
+        <td><strong>${s.mainScore} pts</strong></td>
+        <td>${s.reverseScore > 0 ? `${s.reverseScore} pts` : '--'}</td>
+        <td>
+          <button type="button" class="btn-outline btn-view-breakdown" data-session-id="${escapeHtml(s.sessionId)}" style="padding: 0.3rem 0.65rem; font-size: 0.8rem;">
+            Breakdown
+          </button>
+        </td>
+      `;
+
+      const btnBreakdown = tr.querySelector('.btn-view-breakdown');
+      if (btnBreakdown) {
+        btnBreakdown.addEventListener('click', (e) => {
+          e.preventDefault();
+          openSessionBreakdownModal(s.sessionId);
+        });
+      }
+
+      if (tbody) tbody.appendChild(tr);
+    });
+  }
+
+  async function openSessionBreakdownModal(sessionId) {
+    if (typeof document === 'undefined') return;
+    const modal = document.getElementById('modal-session-breakdown');
+    if (!modal) return;
+
+    const titleEl = document.getElementById('modal-breakdown-title');
+    const subEl = document.getElementById('modal-breakdown-subtitle');
+    const loadingEl = document.getElementById('session-breakdown-loading');
+    const summaryEl = document.getElementById('session-breakdown-summary');
+    const questionsEl = document.getElementById('session-breakdown-questions');
+
+    if (titleEl) titleEl.textContent = 'Pagsusuri sa Sesyon';
+    if (subEl) subEl.textContent = `Session UUID: ${sessionId}`;
+    if (loadingEl) loadingEl.style.display = 'block';
+    if (summaryEl) summaryEl.innerHTML = '';
+    if (questionsEl) questionsEl.innerHTML = '';
+
+    modal.classList.add('active');
+
+    const api = getApi();
+    if (!api) return;
+
+    try {
+      const data = await api.getSessionBreakdown(sessionId);
+      _activeSessionBreakdown = data;
+      renderSessionBreakdown(data);
+    } catch (err) {
+      console.error('[Dashboard] Failed to load session breakdown:', err);
+      if (questionsEl) {
+        questionsEl.innerHTML = `<div style="padding: 2rem; text-align: center; color: var(--dash-danger);">Hindi ma-load ang pagsusuri sa sesyon: ${escapeHtml(err.message)}</div>`;
+      }
+    } finally {
+      if (loadingEl) loadingEl.style.display = 'none';
+    }
+  }
+
+  function closeSessionBreakdownModal() {
+    if (typeof document === 'undefined') return;
+    const modal = document.getElementById('modal-session-breakdown');
+    if (modal) modal.classList.remove('active');
+  }
+
+  function renderSessionBreakdown(breakdown) {
+    if (typeof document === 'undefined') return;
+    const summaryEl = document.getElementById('session-breakdown-summary');
+    const questionsEl = document.getElementById('session-breakdown-questions');
+    const session = breakdown?.session;
+    const answers = breakdown?.answers || [];
+
+    if (summaryEl && session) {
+      const durationStr = session.durationSeconds != null ? `${session.durationSeconds} segundo` : '--';
+      const statusClass = session.status === 'completed' ? 'completed' : (session.status === 'active' ? 'active' : 'abandoned');
+      const statusLabel = session.status === 'completed' ? 'Natapos' : (session.status === 'active' ? 'Kasalukuyan' : 'Iniwan');
+
+      summaryEl.innerHTML = `
+        <div class="account-detail-row">
+          <div class="account-detail-label">Pangalan ng Mag-aaral</div>
+          <div class="account-detail-val" style="font-weight: 700;">${escapeHtml(session.studentName)}</div>
+        </div>
+        <div class="account-detail-row">
+          <div class="account-detail-label">Paksa</div>
+          <div class="account-detail-val">${escapeHtml(session.topicTitle)} (${escapeHtml(session.topicCode)})</div>
+        </div>
+        <div class="account-detail-row">
+          <div class="account-detail-label">Katayuan ng Laro</div>
+          <div class="account-detail-val"><span class="status-badge ${statusClass}">${statusLabel}</span></div>
+        </div>
+        <div class="account-detail-row">
+          <div class="account-detail-label">Marka sa Main Round</div>
+          <div class="account-detail-val"><strong>${session.mainScore} pts</strong></div>
+        </div>
+        <div class="account-detail-row">
+          <div class="account-detail-label">Puntos sa Reverse Round</div>
+          <div class="account-detail-val">${session.reverseScore > 0 ? `${session.reverseScore} pts` : '--'}</div>
+        </div>
+        <div class="account-detail-row">
+          <div class="account-detail-label">Kabuuang Tagal</div>
+          <div class="account-detail-val">${durationStr}</div>
+        </div>
+      `;
+    }
+
+    if (questionsEl) {
+      if (!answers.length) {
+        questionsEl.innerHTML = '<div style="padding: 2rem; text-align: center; color: var(--dash-text-muted);">Walang nakatalang sagot sa sesyong ito.</div>';
+        return;
+      }
+
+      questionsEl.innerHTML = answers.map((ans, idx) => {
+        const isCorrect = Boolean(ans.isCorrect);
+        const badgeHtml = isCorrect
+          ? '<span class="badge-correct">&#10003; Tama</span>'
+          : '<span class="badge-incorrect">&#10007; Mali</span>';
+
+        let rubricHtml = '';
+        if (ans.evaluation) {
+          const evalRub = ans.evaluation;
+          rubricHtml = `
+            <div class="session-rubric-card">
+              <div style="font-weight: 600; margin-bottom: 0.35rem; color: var(--dash-text);">Rubric Evaluation (Pagsusuri sa Malayang Sagot):</div>
+              ${evalRub.feedback ? `<div style="margin-bottom: 0.35rem;"><em>Komento:</em> ${escapeHtml(evalRub.feedback)}</div>` : ''}
+              ${evalRub.rubricCriteria ? `<div style="font-size: 0.75rem; color: var(--dash-text-muted);">Pamantayan: ${escapeHtml(JSON.stringify(evalRub.rubricCriteria))}</div>` : ''}
+            </div>
+          `;
+        }
+
+        return `
+          <div class="session-question-card">
+            <div class="session-question-header">
+              <div class="session-question-meta">
+                <span style="font-weight: 700; color: var(--dash-primary);">#${idx + 1}</span>
+                <span class="badge-type">${escapeHtml(ans.questionType || 'unknown')}</span>
+                <span style="font-family: monospace; font-size: 0.75rem; color: var(--dash-text-muted);">${escapeHtml(ans.questionCode || '')}</span>
+              </div>
+              <div>${badgeHtml}</div>
+            </div>
+
+            <div style="font-weight: 500; font-size: 0.95rem; margin-bottom: 0.6rem; color: var(--dash-text);">
+              ${escapeHtml(ans.questionPrompt || '(Walang nakatalang prompt)')}
+            </div>
+
+            <div class="session-answer-row ${isCorrect ? 'is-correct' : 'is-incorrect'}">
+              <strong>Sagot ng Mag-aaral:</strong> ${escapeHtml(ans.answerText || '(Walang sagot)')}
+              <span style="float: right; font-weight: 600;">${ans.pointsAwarded} / ${ans.maxPoints} pts</span>
+            </div>
+
+            ${ans.explanation ? `
+              <div style="font-size: 0.8rem; color: var(--dash-text-muted); margin-top: 0.4rem;">
+                <strong>Paliwanag / Tamang Sagot:</strong> ${escapeHtml(ans.explanation)}
+              </div>
+            ` : ''}
+
+            ${rubricHtml}
+          </div>
+        `;
+      }).join('');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
   // DOM Event Bindings
   // ---------------------------------------------------------------------------
   function bindEvents() {
@@ -2354,6 +2985,8 @@
         closeEditQuestionModal();
         closePreviewQuestionModal();
         closeRubricPreviewModal();
+        closeStudentHistoryModal();
+        closeSessionBreakdownModal();
         closeApiSettingsModal();
         closeConfirmModal();
       }
@@ -2370,6 +3003,8 @@
         else if (modalType === 'edit-q') closeEditQuestionModal();
         else if (modalType === 'preview-q') closePreviewQuestionModal();
         else if (modalType === 'preview-rubric') closeRubricPreviewModal();
+        else if (modalType === 'student-history') closeStudentHistoryModal();
+        else if (modalType === 'session-breakdown') closeSessionBreakdownModal();
         else if (modalType === 'api-settings') closeApiSettingsModal();
         else if (modalType === 'confirm') closeConfirmModal();
       });
@@ -2747,6 +3382,38 @@
       });
     }
 
+    // -------------------------------------------------------------------------
+    // Student Records & Analytics Toolbar Events (Phase 7)
+    // -------------------------------------------------------------------------
+    const btnRefreshStudents = document.getElementById('btn-refresh-students');
+    if (btnRefreshStudents) {
+      btnRefreshStudents.addEventListener('click', () => {
+        loadAnalyticsOverview();
+        loadStudents();
+      });
+    }
+
+    const studentSearchInput = document.getElementById('student-search-input');
+    if (studentSearchInput) {
+      studentSearchInput.addEventListener('input', (e) => {
+        setStudentSearch(e.target.value);
+      });
+    }
+
+    const studentTopicFilter = document.getElementById('student-topic-filter');
+    if (studentTopicFilter) {
+      studentTopicFilter.addEventListener('change', (e) => {
+        setStudentTopicFilter(e.target.value);
+      });
+    }
+
+    const studentDateFilter = document.getElementById('student-date-filter');
+    if (studentDateFilter) {
+      studentDateFilter.addEventListener('change', (e) => {
+        setStudentDateFilter(e.target.value);
+      });
+    }
+
     // Confirmation Modal Confirm Execution
     const btnExecuteConfirm = document.getElementById('btn-execute-confirm');
     if (btnExecuteConfirm) {
@@ -2848,6 +3515,7 @@
     // Admin-Only Visibility & Controls
     getVerifiedRole,
     isAdminUser,
+    isStaffUser,
     applyRoleBasedVisibility,
     loadSystemStatus,
     openApiSettingsModal,
@@ -2873,6 +3541,8 @@
     promptPublishTopic,
     promptUnpublishTopic,
     promptArchiveTopic,
+    promptDeleteTopic,
+    promptPermanentDeleteTopic,
     showToast,
     getTopicsList: () => [..._topics],
     setTopicsList: (list) => { _topics = [...list]; },
@@ -2893,6 +3563,10 @@
     promptPublishQuestion,
     promptUnpublishQuestion,
     promptArchiveQuestion,
+    promptRestoreQuestion,
+    promptDiscardDraft,
+    promptDeleteQuestion,
+    promptPermanentDeleteQuestion,
     addChoiceRow,
     getChoicesFromEditor,
     getQuestionsList: () => [..._questions],
@@ -2920,7 +3594,28 @@
     openRubricPreviewModal,
     closeRubricPreviewModal,
     getRubricsList: () => [..._rubrics],
-    setRubricsList: (list) => { _rubrics = [...list]; }
+    setRubricsList: (list) => { _rubrics = [...list]; },
+
+    // Student Records & Analytics (Phase 7)
+    loadStudentTopicsDropdown,
+    loadAnalyticsOverview,
+    renderAnalyticsOverview,
+    loadStudents,
+    renderStudents,
+    renderTopicPerformance,
+    setStudentSearch,
+    setStudentTopicFilter,
+    setStudentDateFilter,
+    openStudentHistoryModal,
+    closeStudentHistoryModal,
+    renderStudentHistory,
+    openSessionBreakdownModal,
+    closeSessionBreakdownModal,
+    renderSessionBreakdown,
+    getStudentsList: () => [..._students],
+    setStudentsList: (list) => { _students = [...list]; },
+    getAnalyticsOverviewData: () => _analyticsOverview,
+    setAnalyticsOverviewData: (data) => { _analyticsOverview = data; }
   };
 
   root.PANITIKARD_DASHBOARD = controller;
