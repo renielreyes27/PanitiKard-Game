@@ -364,18 +364,102 @@ describe('Phase 6.9: Centralized Delete & Archive Management', () => {
       });
     });
 
+    test('contentService.deletePermanentTopic prefers authenticated client over adminClient when both provided', async () => {
+      const service = createContentService();
+      let userRpcCalled = false;
+      let adminRpcCalled = false;
+
+      const userClient = {
+        rpc: async (fn, params) => {
+          userRpcCalled = true;
+          assert.equal(fn, 'delete_topic_permanent_cascade');
+          return {
+            data: { success: true, deletedCode: params.p_topic_code, deletedQuestionsCount: 2 },
+            error: null
+          };
+        }
+      };
+
+      const adminClient = {
+        rpc: async () => {
+          adminRpcCalled = true;
+          return { data: null, error: { message: 'should not be called' } };
+        }
+      };
+
+      const result = await service.deletePermanentTopic(userClient, 'cascading-topic', { adminClient });
+      assert.equal(result.success, true);
+      assert.equal(userRpcCalled, true, 'User client RPC must be invoked to preserve JWT and auth.uid() context');
+      assert.equal(adminRpcCalled, false, 'Admin client RPC must NOT be invoked when authenticated user client is available');
+    });
+
+    test('contentService.deletePermanentTopic succeeds on empty draft topic (0 questions)', async () => {
+      const service = createContentService();
+      let passedParams = null;
+      const mockClient = {
+        rpc: async (fn, params) => {
+          assert.equal(fn, 'delete_topic_permanent_cascade');
+          passedParams = params;
+          return {
+            data: { success: true, deletedCode: params.p_topic_code, deletedQuestionsCount: 0 },
+            error: null
+          };
+        }
+      };
+
+      const result = await service.deletePermanentTopic(mockClient, 'empty-draft');
+      assert.equal(result.success, true);
+      assert.equal(result.deletedCode, 'empty-draft');
+      assert.equal(result.deletedQuestionsCount, 0);
+      assert.equal(passedParams.p_topic_code, 'empty-draft');
+    });
+
+    test('contentService.deletePermanentTopic cascades and deletes draft topic with eligible child questions', async () => {
+      const service = createContentService();
+      const mockClient = {
+        rpc: async (fn, params) => {
+          assert.equal(fn, 'delete_topic_permanent_cascade');
+          return {
+            data: { success: true, deletedCode: params.p_topic_code, deletedQuestionsCount: 4 },
+            error: null
+          };
+        }
+      };
+
+      const result = await service.deletePermanentTopic(mockClient, 'draft-with-q');
+      assert.equal(result.success, true);
+      assert.equal(result.deletedCode, 'draft-with-q');
+      assert.equal(result.deletedQuestionsCount, 4);
+    });
+
+    test('contentService.deletePermanentTopic cascades and deletes archived topic with eligible child questions', async () => {
+      const service = createContentService();
+      const mockClient = {
+        rpc: async (fn, params) => {
+          assert.equal(fn, 'delete_topic_permanent_cascade');
+          return {
+            data: { success: true, deletedCode: params.p_topic_code, deletedQuestionsCount: 2 },
+            error: null
+          };
+        }
+      };
+
+      const result = await service.deletePermanentTopic(mockClient, 'archived-topic');
+      assert.equal(result.success, true);
+      assert.equal(result.deletedCode, 'archived-topic');
+      assert.equal(result.deletedQuestionsCount, 2);
+    });
+
     test('contentService.deletePermanentTopic rejects published topic (400 CANNOT_DELETE_ACTIVE_TOPIC)', async () => {
       const service = createContentService();
       const mockClient = {
-        from: () => ({
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () => ({
-                data: { id: 't-1', code: 'pub-topic', status: 'published' },
-                error: null
-              })
-            })
-          })
+        rpc: async () => ({
+          data: null,
+          error: {
+            code: '22023',
+            details: 'CANNOT_DELETE_ACTIVE_TOPIC',
+            message: 'Published topics cannot be permanently deleted. Archive the topic first.'
+          }
         })
       };
 
@@ -389,75 +473,40 @@ describe('Phase 6.9: Centralized Delete & Archive Management', () => {
       );
     });
 
-    test('contentService.deletePermanentTopic allows unreferenced archived topic', async () => {
+    test('contentService.deletePermanentTopic rejects topic containing published questions (400 TOPIC_HAS_PUBLISHED_QUESTIONS)', async () => {
       const service = createContentService();
-      let deletedTopicId = null;
       const mockClient = {
-        from: (table) => {
-          if (table === 'topics') {
-            return {
-              select: () => ({
-                eq: () => ({
-                  maybeSingle: async () => ({
-                    data: { id: 't-archived', code: 'archived-topic', status: 'archived' },
-                    error: null
-                  })
-                })
-              }),
-              delete: () => ({
-                eq: async (_col, val) => {
-                  deletedTopicId = val;
-                  return { error: null };
-                }
-              })
-            };
+        rpc: async () => ({
+          data: null,
+          error: {
+            code: '22023',
+            details: 'TOPIC_HAS_PUBLISHED_QUESTIONS',
+            message: 'Cannot delete topic containing published questions. Archive or unpublish them first.'
           }
-          if (table === 'questions' || table === 'game_sessions') {
-            return {
-              select: () => ({
-                eq: async () => ({ count: 0, error: null })
-              })
-            };
-          }
-        }
+        })
       };
 
-      const result = await service.deletePermanentTopic(mockClient, 'archived-topic');
-      assert.equal(result.success, true);
-      assert.equal(deletedTopicId, 't-archived');
+      await assert.rejects(
+        () => service.deletePermanentTopic(mockClient, 'topic-pub-q'),
+        (err) => {
+          assert.equal(err.status, 400);
+          assert.equal(err.code, 'TOPIC_HAS_PUBLISHED_QUESTIONS');
+          return true;
+        }
+      );
     });
 
     test('contentService.deletePermanentTopic rejects archived topic containing game sessions (409 TOPIC_HAS_SESSIONS)', async () => {
       const service = createContentService();
       const mockClient = {
-        from: (table) => {
-          if (table === 'topics') {
-            return {
-              select: () => ({
-                eq: () => ({
-                  maybeSingle: async () => ({
-                    data: { id: 't-sessions', code: 'topic-sessions', status: 'archived' },
-                    error: null
-                  })
-                })
-              })
-            };
+        rpc: async () => ({
+          data: null,
+          error: {
+            code: '23503',
+            details: 'TOPIC_HAS_SESSIONS',
+            message: 'Cannot permanently delete topic with historical gameplay sessions.'
           }
-          if (table === 'questions') {
-            return {
-              select: () => ({
-                eq: async () => ({ count: 0, error: null })
-              })
-            };
-          }
-          if (table === 'game_sessions') {
-            return {
-              select: () => ({
-                eq: async () => ({ count: 5, error: null })
-              })
-            };
-          }
-        }
+        })
       };
 
       await assert.rejects(
@@ -470,37 +519,94 @@ describe('Phase 6.9: Centralized Delete & Archive Management', () => {
       );
     });
 
-    test('contentService.deletePermanentTopic rejects draft topic containing questions (409 TOPIC_HAS_QUESTIONS)', async () => {
+    test('contentService.deletePermanentTopic rejects topic with student answers on child questions (409 TOPIC_QUESTIONS_HAVE_ANSWERS)', async () => {
       const service = createContentService();
       const mockClient = {
-        from: (table) => {
-          if (table === 'topics') {
-            return {
-              select: () => ({
-                eq: () => ({
-                  maybeSingle: async () => ({
-                    data: { id: 't-1', code: 'draft-topic', status: 'draft' },
-                    error: null
-                  })
-                })
-              })
-            };
+        rpc: async () => ({
+          data: null,
+          error: {
+            code: '23503',
+            details: 'TOPIC_QUESTIONS_HAVE_ANSWERS',
+            message: 'Cannot permanently delete topic because its questions contain historical student answers. Archive it instead.'
           }
-          if (table === 'questions') {
-            return {
-              select: () => ({
-                eq: async () => ({ count: 3, error: null })
-              })
-            };
-          }
-        }
+        })
       };
 
       await assert.rejects(
-        () => service.deletePermanentTopic(mockClient, 'draft-topic'),
+        () => service.deletePermanentTopic(mockClient, 'topic-with-answers'),
         (err) => {
           assert.equal(err.status, 409);
-          assert.equal(err.code, 'TOPIC_HAS_QUESTIONS');
+          assert.equal(err.code, 'TOPIC_QUESTIONS_HAVE_ANSWERS');
+          return true;
+        }
+      );
+    });
+
+    test('contentService.deletePermanentTopic rejects topic with AI evaluations on child questions (409 TOPIC_QUESTIONS_HAVE_EVALUATIONS)', async () => {
+      const service = createContentService();
+      const mockClient = {
+        rpc: async () => ({
+          data: null,
+          error: {
+            code: '23503',
+            details: 'TOPIC_QUESTIONS_HAVE_EVALUATIONS',
+            message: 'Cannot permanently delete topic because its questions contain historical AI evaluations. Archive it instead.'
+          }
+        })
+      };
+
+      await assert.rejects(
+        () => service.deletePermanentTopic(mockClient, 'topic-with-evals'),
+        (err) => {
+          assert.equal(err.status, 409);
+          assert.equal(err.code, 'TOPIC_QUESTIONS_HAVE_EVALUATIONS');
+          return true;
+        }
+      );
+    });
+
+    test('contentService.deletePermanentTopic rejects unauthorized invocation (403 FORBIDDEN)', async () => {
+      const service = createContentService();
+      const mockClient = {
+        rpc: async () => ({
+          data: null,
+          error: {
+            code: '42501',
+            details: 'FORBIDDEN',
+            message: 'Teacher or administrator permission required'
+          }
+        })
+      };
+
+      await assert.rejects(
+        () => service.deletePermanentTopic(mockClient, 'unauth-topic'),
+        (err) => {
+          assert.equal(err.status, 403);
+          assert.equal(err.code, 'FORBIDDEN');
+          return true;
+        }
+      );
+    });
+
+    test('contentService.deletePermanentTopic rolls back and sanitizes unexpected database failure (503 DATABASE_ERROR)', async () => {
+      const service = createContentService();
+      const mockClient = {
+        rpc: async () => ({
+          data: null,
+          error: {
+            code: 'XX000',
+            details: '',
+            message: 'internal connection failure during transaction'
+          }
+        })
+      };
+
+      await assert.rejects(
+        () => service.deletePermanentTopic(mockClient, 'crash-topic'),
+        (err) => {
+          assert.equal(err.status, 503);
+          assert.equal(err.code, 'DATABASE_ERROR');
+          assert.equal(err.message, 'Unable to delete topic permanently due to an internal database error.');
           return true;
         }
       );

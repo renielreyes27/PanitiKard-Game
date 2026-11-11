@@ -343,37 +343,54 @@ function createContentService() {
     },
 
     async deletePermanentTopic(client, code, { adminClient } = {}) {
-      const db = adminClient || client;
-      const { data: topic, error } = await client.from('topics')
-        .select('id, code, status').eq('code', code).maybeSingle();
-      check(error, 'Load topic');
-      if (!topic) throw new HttpError(404, 'TOPIC_NOT_FOUND', 'Topic not found.');
-      if (topic.status === 'published') {
-        throw new HttpError(400, 'CANNOT_DELETE_ACTIVE_TOPIC', 'Published topics cannot be permanently deleted. Archive the topic first.');
-      }
-      if (!['draft', 'archived'].includes(topic.status)) {
-        throw new HttpError(400, 'CANNOT_DELETE_NON_DRAFT', 'Only unreferenced draft or archived topics can be permanently deleted.');
+      const db = client || adminClient;
+      if (!db || typeof db.rpc !== 'function') {
+        throw new HttpError(503, 'DATABASE_ERROR', 'Database client is not available.');
       }
 
-      // Dependency check: check if any questions exist
-      const { count: qCount, error: qErr } = await db.from('questions')
-        .select('id', { count: 'exact', head: true }).eq('topic_id', topic.id);
-      check(qErr, 'Check question dependencies');
-      if (qCount && qCount > 0) {
-        throw new HttpError(409, 'TOPIC_HAS_QUESTIONS', 'Cannot permanently delete topic because it contains questions. Delete or move the questions first.');
+      const { data, error } = await db.rpc('delete_topic_permanent_cascade', {
+        p_topic_code: code
+      });
+
+      if (error) {
+        const detail = String(error.details || error.detail || '');
+        const sqlCode = String(error.code || '');
+        const message = String(error.message || '');
+
+        if (detail === 'TOPIC_NOT_FOUND' || sqlCode === 'P0002' || /topic not found/i.test(message)) {
+          throw new HttpError(404, 'TOPIC_NOT_FOUND', 'Topic not found.');
+        }
+        if (detail === 'FORBIDDEN' || sqlCode === '42501' || /permission required/i.test(message)) {
+          throw new HttpError(403, 'FORBIDDEN', 'Teacher or administrator permission required.');
+        }
+        if (detail === 'CANNOT_DELETE_ACTIVE_TOPIC' || /published topics cannot be permanently deleted/i.test(message)) {
+          throw new HttpError(400, 'CANNOT_DELETE_ACTIVE_TOPIC', 'Published topics cannot be permanently deleted. Archive the topic first.');
+        }
+        if (detail === 'CANNOT_DELETE_NON_DRAFT' || /only unreferenced draft or archived/i.test(message)) {
+          throw new HttpError(400, 'CANNOT_DELETE_NON_DRAFT', 'Only unreferenced draft or archived topics can be permanently deleted.');
+        }
+        if (detail === 'TOPIC_HAS_PUBLISHED_QUESTIONS' || /cannot delete topic containing published questions/i.test(message)) {
+          throw new HttpError(400, 'TOPIC_HAS_PUBLISHED_QUESTIONS', 'Cannot delete topic containing published questions. Archive or unpublish them first.');
+        }
+        if (detail === 'TOPIC_HAS_SESSIONS' || /historical gameplay sessions/i.test(message)) {
+          throw new HttpError(409, 'TOPIC_HAS_SESSIONS', 'Cannot permanently delete topic with historical gameplay sessions.');
+        }
+        if (detail === 'TOPIC_QUESTIONS_HAVE_ANSWERS' || /historical student answers/i.test(message)) {
+          throw new HttpError(409, 'TOPIC_QUESTIONS_HAVE_ANSWERS', 'Cannot permanently delete topic because its questions contain historical student answers. Archive it instead.');
+        }
+        if (detail === 'TOPIC_QUESTIONS_HAVE_EVALUATIONS' || /historical ai evaluations/i.test(message)) {
+          throw new HttpError(409, 'TOPIC_QUESTIONS_HAVE_EVALUATIONS', 'Cannot permanently delete topic because its questions contain historical AI evaluations. Archive it instead.');
+        }
+
+        console.error('[Content] delete_topic_permanent_cascade error:', sqlCode, detail || message);
+        throw new HttpError(503, 'DATABASE_ERROR', 'Unable to delete topic permanently due to an internal database error.');
       }
 
-      // Dependency check: check if any game sessions exist
-      const { count: sCount, error: sErr } = await db.from('game_sessions')
-        .select('id', { count: 'exact', head: true }).eq('topic_id', topic.id);
-      check(sErr, 'Check session dependencies');
-      if (sCount && sCount > 0) {
-        throw new HttpError(409, 'TOPIC_HAS_SESSIONS', 'Cannot permanently delete topic with historical gameplay sessions.');
-      }
-
-      const { error: delErr } = await db.from('topics').delete().eq('id', topic.id);
-      check(delErr, 'Delete topic permanently');
-      return { success: true, deletedCode: code };
+      return {
+        success: true,
+        deletedCode: data?.deletedCode || code,
+        deletedQuestionsCount: typeof data?.deletedQuestionsCount === 'number' ? data.deletedQuestionsCount : 0
+      };
     },
 
     async deletePermanentQuestion(client, questionCode, { adminClient } = {}) {

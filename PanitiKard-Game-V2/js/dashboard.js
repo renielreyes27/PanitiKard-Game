@@ -2172,15 +2172,18 @@
           setTimeout(() => {
             openConfirmModal({
               title: 'Huling Kumpirmasyon ng Pagbura',
-              message: `Kumpirmahin ang pagbura ng paksang "${topic.title}". Tiyaking walang ibang katanungan o talaan ng laro ang nakakabit dito. Kapag may nakakabit na datos, tatanggihan ng server ang pagbura.`,
-              confirmText: 'Oo, Burahin nang Tuluyan',
+              message: `Kumpirmahin ang pagbura ng paksang "${topic.title}" (${topic.code}). Kasama ring mabubura nang tuluyan ang lahat ng mga borador o naka-archive na katanungan, version, at rubric na nakapailalim dito.\n\nPAUNAWA: Kapag may nakakabit na talaan ng laro o sagot ng mag-aaral, o kung may katanungang kasalukuyang inilathala, tatanggihan ng server ang pagbura upang protektahan ang datos ng mga mag-aaral.`,
+              confirmText: 'Oo, Burahin ang Paksa at mga Tanong',
               confirmClass: 'btn-logout',
               onConfirm: async () => {
                 const api = getApi();
                 try {
-                  await api.deleteTopicPermanent(topic.code);
-                  showToast(`Tuluyan nang nabura ang paksang "${topic.title}".`, 'success');
+                  const res = await api.deleteTopicPermanent(topic.code);
+                  const count = res?.data?.deletedQuestionsCount ?? res?.deletedQuestionsCount ?? 0;
+                  const countText = count > 0 ? ` at ang ${count} kaugnay na katanungan` : '';
+                  showToast(`Tuluyan nang nabura ang paksang "${topic.title}"${countText}.`, 'success');
                   loadTopics();
+                  loadQuestions();
                 } catch (err) {
                   showToast(`Nabigong burahin: ${err.message}`, 'error');
                 }
